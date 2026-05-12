@@ -1,10 +1,25 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/** URL prefixes that require an authenticated session. */
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/transactions",
+  "/accounts",
+  "/signals",
+  "/settings",
+  "/onboarding",
+];
+
+function isProtectedPath(pathname: string) {
+  return PROTECTED_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/"),
+  );
+}
+
 /**
- * Refreshes the Supabase auth session on every request and (optionally)
- * gates protected routes. Called from `proxy.ts` (Next.js 16's renamed
- * middleware convention).
+ * Refreshes the Supabase auth session on every request and gates protected
+ * routes. Called from `proxy.ts` (Next.js 16's renamed middleware convention).
  */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -30,27 +45,23 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // IMPORTANT: do not run code between createServerClient and getUser().
+  // IMPORTANT: do not run other code between createServerClient and getUser().
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Route protection: anything under /app requires a session.
-  // Public routes: "/", "/login", "/auth/*".
   const { pathname } = request.nextUrl;
-  const isProtected = pathname.startsWith("/app");
 
-  if (isProtected && !user) {
+  if (isProtectedPath(pathname) && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", pathname);
+    url.search = "";
     return NextResponse.redirect(url);
   }
 
-  // If a signed-in user hits /login, send them to the app.
   if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/app";
+    url.pathname = "/dashboard";
     url.search = "";
     return NextResponse.redirect(url);
   }
