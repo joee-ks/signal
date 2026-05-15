@@ -19,6 +19,8 @@ const createSchema = baseSchema;
 const updateSchema = baseSchema.extend({ id: z.string().uuid() });
 const idSchema = z.object({ id: z.string().uuid() });
 
+type SupaClient = Awaited<ReturnType<typeof createClient>>;
+
 async function requireUser() {
   const supabase = await createClient();
   const {
@@ -45,34 +47,101 @@ function buildTxnRow(parsed: z.infer<typeof baseSchema>) {
   };
 }
 
+/**
+ * Apply a delta to an account's current_balance_cents. Read-modify-write —
+ * not strictly atomic, but RLS ensures cross-user safety, and the SubmitButton
+ * prevents same-user double-fires from the UI.
+ *
+ * Manual add/edit/delete uses this so the "current balance" tracks reality as
+ * the user adds new activity. CSV imports (Phase 2.5) bypass these actions
+ * and insert directly, preserving the imported-history-doesn't-rewrite-balance
+ * semantic.
+ */
+async function adjustBalance(
+  supabase: SupaClient,
+  accountId: string,
+  delta: number,
+) {
+  if (delta === 0) return;
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("current_balance_cents")
+    .eq("id", accountId)
+    .maybeSingle();
+  if (!account) return;
+  await supabase
+    .from("accounts")
+    .update({
+      current_balance_cents:
+        (account.current_balance_cents ?? 0) + delta,
+    })
+    .eq("id", accountId);
+}
+
 export async function createTransaction(formData: FormData) {
   const parsed = createSchema.parse(Object.fromEntries(formData));
   const { supabase, user } = await requireUser();
   const row = buildTxnRow(parsed);
+
   const { error } = await supabase.from("transactions").insert({
     user_id: user.id,
     ...row,
   });
   if (error) throw error;
+
+  await adjustBalance(supabase, row.account_id, row.amount_cents);
   redirect("/transactions");
 }
 
 export async function updateTransaction(formData: FormData) {
   const parsed = updateSchema.parse(Object.fromEntries(formData));
   const { supabase } = await requireUser();
-  const row = buildTxnRow(parsed);
+  const newRow = buildTxnRow(parsed);
+
+  // Fetch old values to compute balance delta(s).
+  const { data: old } = await supabase
+    .from("transactions")
+    .select("account_id, amount_cents")
+    .eq("id", parsed.id)
+    .maybeSingle();
+  if (!old) throw new Error("Transaction not found.");
+
   const { error } = await supabase
     .from("transactions")
-    .update(row)
+    .update(newRow)
     .eq("id", parsed.id);
   if (error) throw error;
+
+  if (old.account_id !== newRow.account_id) {
+    // Moved between accounts: revert on the old, apply on the new.
+    await adjustBalance(supabase, old.account_id, -old.amount_cents);
+    await adjustBalance(supabase, newRow.account_id, newRow.amount_cents);
+  } else {
+    const delta = newRow.amount_cents - old.amount_cents;
+    if (delta !== 0) {
+      await adjustBalance(supabase, newRow.account_id, delta);
+    }
+  }
   redirect("/transactions");
 }
 
 export async function deleteTransaction(formData: FormData) {
   const { id } = idSchema.parse(Object.fromEntries(formData));
   const { supabase } = await requireUser();
-  const { error } = await supabase.from("transactions").delete().eq("id", id);
+
+  const { data: old } = await supabase
+    .from("transactions")
+    .select("account_id, amount_cents")
+    .eq("id", id)
+    .maybeSingle();
+  if (!old) throw new Error("Transaction not found.");
+
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("id", id);
   if (error) throw error;
+
+  await adjustBalance(supabase, old.account_id, -old.amount_cents);
   redirect("/transactions");
 }
