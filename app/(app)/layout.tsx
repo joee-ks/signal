@@ -4,6 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./_actions";
 import { Button } from "@/components/ui/button";
 
+const NAV = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/transactions", label: "Transactions" },
+  { href: "/accounts", label: "Accounts" },
+] as const;
+
 export default async function AppLayout({
   children,
 }: {
@@ -14,8 +20,7 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Defense in depth — the proxy already gates these routes, but never trust
-  // middleware alone for auth.
+  // Defense in depth — proxy already gates these, but never trust middleware alone.
   if (!user) redirect("/login");
 
   return (
@@ -27,12 +32,15 @@ export default async function AppLayout({
               Signal
             </Link>
             <nav className="hidden items-center gap-1 text-sm sm:flex">
-              <Link
-                href="/dashboard"
-                className="rounded-md px-2 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                Dashboard
-              </Link>
+              {NAV.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-md px-2 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {item.label}
+                </Link>
+              ))}
             </nav>
           </div>
           <div className="flex items-center gap-3">
@@ -44,6 +52,20 @@ export default async function AppLayout({
                 Sign out
               </Button>
             </form>
+          </div>
+        </div>
+        {/* Mobile nav row */}
+        <div className="border-t sm:hidden">
+          <div className="mx-auto flex w-full max-w-5xl gap-1 overflow-x-auto px-4 py-2 text-sm">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-md px-2 py-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                {item.label}
+              </Link>
+            ))}
           </div>
         </div>
       </header>
