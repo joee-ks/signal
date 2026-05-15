@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 
 export default async function OnboardingPage() {
@@ -117,9 +118,9 @@ export default async function OnboardingPage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full">
+            <SubmitButton className="w-full" pendingLabel="Setting up…">
               Finish setup
-            </Button>
+            </SubmitButton>
           </form>
         </CardContent>
       </Card>

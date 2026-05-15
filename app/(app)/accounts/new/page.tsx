@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 
 export default function NewAccountPage() {
@@ -51,9 +52,7 @@ export default function NewAccountPage() {
               </p>
             </div>
             <div className="flex gap-2 pt-2">
-              <Button type="submit" className="flex-1">
-                Add account
-              </Button>
+              <SubmitButton className="flex-1">Add account</SubmitButton>
               <Button
                 type="button"
                 variant="ghost"

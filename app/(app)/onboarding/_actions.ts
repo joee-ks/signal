@@ -21,6 +21,17 @@ export async function completeOnboarding(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Idempotency: if the user has already completed onboarding, do nothing.
+  // This makes the action safe against double-submits / browser retries.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("onboarded_at")
+    .eq("id", user.id)
+    .single();
+  if (profile?.onboarded_at) {
+    redirect("/dashboard");
+  }
+
   const incomeCents = centsFromDollarString(parsed.monthly_income);
   const balanceCents = centsFromDollarString(parsed.account_balance) ?? 0;
   if (incomeCents == null || incomeCents < 0) {

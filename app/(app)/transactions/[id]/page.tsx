@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 import { CATEGORIES } from "@/lib/categories";
 import { dollarsFromCents } from "@/lib/format";
@@ -147,9 +148,7 @@ export default async function EditTransactionPage(props: {
             </div>
 
             <div className="flex gap-2 pt-2">
-              <Button type="submit" className="flex-1">
-                Save changes
-              </Button>
+              <SubmitButton className="flex-1">Save changes</SubmitButton>
               <Button
                 type="button"
                 variant="ghost"
@@ -167,9 +166,9 @@ export default async function EditTransactionPage(props: {
         <CardContent>
           <form action={deleteTransaction}>
             <input type="hidden" name="id" value={txn.id} />
-            <Button type="submit" variant="destructive">
+            <SubmitButton variant="destructive" pendingLabel="Deleting…">
               Delete transaction
-            </Button>
+            </SubmitButton>
           </form>
         </CardContent>
       </Card>

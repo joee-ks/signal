@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 import { CATEGORIES } from "@/lib/categories";
 
@@ -120,9 +121,7 @@ export default async function NewTransactionPage() {
             </div>
 
             <div className="flex gap-2 pt-2">
-              <Button type="submit" className="flex-1">
-                Add transaction
-              </Button>
+              <SubmitButton className="flex-1">Add transaction</SubmitButton>
               <Button
                 type="button"
                 variant="ghost"

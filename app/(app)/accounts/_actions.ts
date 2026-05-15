@@ -79,3 +79,24 @@ export async function unarchiveAccount(formData: FormData) {
   if (error) throw error;
   redirect("/accounts");
 }
+
+/**
+ * Hard-delete an account. Refuses if the account has any transactions —
+ * use archive for those instead. Intended for cleaning up accidental dupes.
+ */
+export async function deleteAccount(formData: FormData) {
+  const { id } = idSchema.parse(Object.fromEntries(formData));
+  const { supabase } = await requireUser();
+  const { count } = await supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", id);
+  if ((count ?? 0) > 0) {
+    throw new Error(
+      "Account has transactions — archive it instead of deleting.",
+    );
+  }
+  const { error } = await supabase.from("accounts").delete().eq("id", id);
+  if (error) throw error;
+  redirect("/accounts");
+}

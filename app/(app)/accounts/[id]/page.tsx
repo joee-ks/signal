@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   archiveAccount,
+  deleteAccount,
   unarchiveAccount,
   updateAccount,
 } from "../_actions";
@@ -10,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 import { dollarsFromCents } from "@/lib/format";
 
@@ -23,12 +25,16 @@ export default async function EditAccountPage(props: {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: account } = await supabase
-    .from("accounts")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const [{ data: account }, { count: txCount }] = await Promise.all([
+    supabase.from("accounts").select("*").eq("id", id).maybeSingle(),
+    supabase
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", id),
+  ]);
   if (!account) notFound();
+
+  const hasTransactions = (txCount ?? 0) > 0;
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -72,9 +78,7 @@ export default async function EditAccountPage(props: {
               />
             </div>
             <div className="flex gap-2 pt-2">
-              <Button type="submit" className="flex-1">
-                Save changes
-              </Button>
+              <SubmitButton className="flex-1">Save changes</SubmitButton>
               <Button
                 type="button"
                 variant="ghost"
@@ -97,20 +101,28 @@ export default async function EditAccountPage(props: {
                 This account is archived — hidden from totals, transactions
                 preserved.
               </p>
-              <Button type="submit" variant="outline">
-                Unarchive account
-              </Button>
+              <SubmitButton variant="outline">Unarchive account</SubmitButton>
             </form>
-          ) : (
+          ) : hasTransactions ? (
             <form action={archiveAccount}>
               <input type="hidden" name="id" value={account.id} />
               <p className="mb-3 text-sm text-muted-foreground">
-                Archiving hides the account from totals but preserves all its
+                Archiving hides the account from totals but preserves its
                 transaction history. You can unarchive any time.
               </p>
-              <Button type="submit" variant="destructive">
-                Archive account
-              </Button>
+              <SubmitButton variant="destructive">Archive account</SubmitButton>
+            </form>
+          ) : (
+            <form action={deleteAccount}>
+              <input type="hidden" name="id" value={account.id} />
+              <p className="mb-3 text-sm text-muted-foreground">
+                This account has no transactions, so it can be deleted outright.
+                (If you later add transactions, you&apos;ll only be able to
+                archive it.)
+              </p>
+              <SubmitButton variant="destructive" pendingLabel="Deleting…">
+                Delete account
+              </SubmitButton>
             </form>
           )}
         </CardContent>
