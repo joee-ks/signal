@@ -44,8 +44,10 @@ export default async function DashboardPage(props: {
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id);
 
-  const showSampleDataButton =
-    active.length === 0 && (txCount ?? 0) === 0;
+  // Allow loading sample data any time before the user has real transactions.
+  // The action seeds a separate "Sample Checking" account so it can co-exist
+  // with whatever account onboarding created.
+  const showSampleDataButton = (txCount ?? 0) === 0;
 
   return (
     <div className="space-y-6">

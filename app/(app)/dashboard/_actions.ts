@@ -16,14 +16,13 @@ export async function loadSampleData() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Sum all existing non-archived accounts. If they already have some, no-op.
-  const { count } = await supabase
-    .from("accounts")
+  // Refuse if the user already has any transactions — we don't want sample
+  // data co-mingling with real history. (Pre-onboarding empty account is fine.)
+  const { count: txCount } = await supabase
+    .from("transactions")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .eq("is_archived", false);
-
-  if ((count ?? 0) > 0) {
+    .eq("user_id", user.id);
+  if ((txCount ?? 0) > 0) {
     redirect("/dashboard?info=sample_skipped");
   }
 
