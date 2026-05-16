@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -94,6 +94,15 @@ function LoginPageContent() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [wrongMode, setWrongMode] = useState(false);
+
+  // Reset transient state when the user switches between sign-in and sign-up.
+  // The component instance is preserved across the URL change, so without this
+  // a stale wrongMode/sent from the previous mode would leak through.
+  useEffect(() => {
+    setWrongMode(false);
+    setSent(false);
+    setLoading(false);
+  }, [mode]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
