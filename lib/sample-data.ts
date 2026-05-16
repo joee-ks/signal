@@ -251,9 +251,12 @@ function generateBalanced(opts: { seed?: number } = {}): SampleTransaction[] {
   pushNoise(out, rng, start, today, { count: 12, merchants: SHOPPING,  range_cents: [1500, 18000], category: "shopping",  bucket: "discretionary" });
   pushNoise(out, rng, start, today, { count: 18, merchants: TRANSPORT, range_cents: [800, 4500],   category: "transport", bucket: "essential" });
 
-  // Planted subscription creep: a new monthly sub appears ~30 days ago.
-  const creepStart = subDays(today, 30);
-  for (let d = new Date(creepStart); d <= today; d = addDays(d, 30)) {
+  // Planted signals:
+  //  - Patreon Creator started ~30 days ago, $19.99/mo → subscription_creep (info)
+  //  - Notion AI Premium started ~25 days ago, $25/mo → subscription_creep (watch, >$20)
+  //  - Extra dining transactions in the last 30 days → lifestyle_inflation (watch)
+  const patreonStart = subDays(today, 30);
+  for (let d = new Date(patreonStart); d <= today; d = addDays(d, 30)) {
     out.push({
       occurred_on: format(d, "yyyy-MM-dd"),
       amount_cents: -1999,
@@ -264,6 +267,25 @@ function generateBalanced(opts: { seed?: number } = {}): SampleTransaction[] {
       is_recurring: true,
     });
   }
+  const notionStart = subDays(today, 25);
+  for (let d = new Date(notionStart); d <= today; d = addDays(d, 30)) {
+    out.push({
+      occurred_on: format(d, "yyyy-MM-dd"),
+      amount_cents: -2500,
+      description: "NOTION AI PREMIUM",
+      merchant: "Notion",
+      category: "subscriptions",
+      bucket: "discretionary",
+      is_recurring: true,
+    });
+  }
+  pushNoise(out, rng, subDays(today, 30), today, {
+    count: 4,
+    merchants: DINING,
+    range_cents: [2200, 3800],
+    category: "dining",
+    bucket: "discretionary",
+  });
 
   return out.sort((a, b) => a.occurred_on.localeCompare(b.occurred_on));
 }
@@ -321,6 +343,21 @@ function generateTight(opts: { seed?: number } = {}): SampleTransaction[] {
   pushNoise(out, rng, start, today, { count: 10, merchants: CHEAP_DINING,  range_cents: [800, 1400],   category: "dining",    bucket: "discretionary" });
   pushNoise(out, rng, start, today, { count: 8,  merchants: ["METRO TRANSIT", "SHELL OIL 575"], range_cents: [400, 2800], category: "transport", bucket: "essential" });
 
+  // Small recent streaming sub — represents a tight-budget user who recently
+  // added Hulu they probably can't really afford. Fires subscription_creep (info).
+  const huluStart = subDays(today, 30);
+  for (let d = new Date(huluStart); d <= today; d = addDays(d, 30)) {
+    out.push({
+      occurred_on: format(d, "yyyy-MM-dd"),
+      amount_cents: -799,
+      description: "HULU",
+      merchant: "Hulu",
+      category: "subscriptions",
+      bucket: "discretionary",
+      is_recurring: true,
+    });
+  }
+
   return out.sort((a, b) => a.occurred_on.localeCompare(b.occurred_on));
 }
 
@@ -377,6 +414,16 @@ function generateVariable(opts: { seed?: number } = {}): SampleTransaction[] {
   pushNoise(out, rng, start, today, { count: 18, merchants: DINING,    range_cents: [1200, 3800],  category: "dining",    bucket: "discretionary" });
   pushNoise(out, rng, start, today, { count: 20, merchants: COFFEE,    range_cents: [400, 800],    category: "coffee",    bucket: "discretionary" });
   pushNoise(out, rng, start, today, { count: 15, merchants: TRANSPORT, range_cents: [800, 4000],   category: "transport", bucket: "essential" });
+
+  // Occasional dining splurge after a big client check came in — triggers
+  // lifestyle_inflation in dining at watch severity.
+  pushNoise(out, rng, subDays(today, 30), today, {
+    count: 3,
+    merchants: DINING,
+    range_cents: [2000, 4000],
+    category: "dining",
+    bucket: "discretionary",
+  });
 
   return out.sort((a, b) => a.occurred_on.localeCompare(b.occurred_on));
 }
@@ -604,7 +651,7 @@ export const PERSONAS: readonly Persona[] = [
     id: "balanced",
     label: "Balanced",
     description:
-      "Moderate income, slightly tight buffer, includes a planted subscription-creep signal.",
+      "Moderate income, slightly tight buffer; planted subscription creeps (info + watch) and a watch-level dining inflation.",
     monthly_income_cents: 480000,
     starting_balance_cents: 320000,
     generate: generateBalanced,
@@ -613,7 +660,7 @@ export const PERSONAS: readonly Persona[] = [
     id: "tight",
     label: "Tight budget",
     description:
-      "Essentials eat ~85% of income; near-zero cash buffer; student-loan debt; underwater on the 20%-shock test — visible stress across buffer, commitment-load, and shock sub-scores plus a clear shock-drop deficit.",
+      "Essentials eat ~85% of income; near-zero cash buffer; student-loan debt; underwater on shock-resilience; plus a small recent streaming sub that fires a creep signal.",
     monthly_income_cents: 250000,
     starting_balance_cents: 30000,
     generate: generateTight,
@@ -622,7 +669,7 @@ export const PERSONAS: readonly Persona[] = [
     id: "variable",
     label: "Variable income",
     description:
-      "Freelancer with irregular gig deposits — should trigger the income-variability detector.",
+      "Freelancer with irregular gig deposits plus an occasional dining splurge — triggers income-variability (high) and lifestyle-inflation (watch).",
     monthly_income_cents: 350000,
     starting_balance_cents: 220000,
     generate: generateVariable,
