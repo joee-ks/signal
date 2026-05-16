@@ -253,7 +253,7 @@ function generateBalanced(opts: { seed?: number } = {}): SampleTransaction[] {
 
   // Planted signals:
   //  - Patreon Creator started ~30 days ago, $19.99/mo → subscription_creep (info)
-  //  - Notion AI Premium started ~25 days ago, $25/mo → subscription_creep (watch, >$20)
+  //  - Notion AI Premium started 30 days ago, $25/mo → subscription_creep (watch, >$20)
   //  - Extra dining transactions in the last 30 days → lifestyle_inflation (watch)
   const patreonStart = subDays(today, 30);
   for (let d = new Date(patreonStart); d <= today; d = addDays(d, 30)) {
@@ -267,7 +267,7 @@ function generateBalanced(opts: { seed?: number } = {}): SampleTransaction[] {
       is_recurring: true,
     });
   }
-  const notionStart = subDays(today, 25);
+  const notionStart = subDays(today, 30);
   for (let d = new Date(notionStart); d <= today; d = addDays(d, 30)) {
     out.push({
       occurred_on: format(d, "yyyy-MM-dd"),
@@ -280,7 +280,7 @@ function generateBalanced(opts: { seed?: number } = {}): SampleTransaction[] {
     });
   }
   pushNoise(out, rng, subDays(today, 30), today, {
-    count: 4,
+    count: 7,
     merchants: DINING,
     range_cents: [2200, 3800],
     category: "dining",
@@ -418,7 +418,7 @@ function generateVariable(opts: { seed?: number } = {}): SampleTransaction[] {
   // Occasional dining splurge after a big client check came in — triggers
   // lifestyle_inflation in dining at watch severity.
   pushNoise(out, rng, subDays(today, 30), today, {
-    count: 3,
+    count: 6,
     merchants: DINING,
     range_cents: [2000, 4000],
     category: "dining",
@@ -536,7 +536,7 @@ function generateStacker(opts: { seed?: number } = {}): SampleTransaction[] {
   const newSubs = [
     { firstSeenDaysAgo: 30, amt: -1599, desc: "HBO MAX",              m: "HBO Max",  c: "subscriptions" }, // info (<$20)
     { firstSeenDaysAgo: 32, amt: -2000, desc: "OPENAI*CHATGPT PLUS",  m: "OpenAI",   c: "subscriptions" }, // info (=$20, boundary)
-    { firstSeenDaysAgo: 28, amt: -5499, desc: "ADOBE CREATIVE CLOUD", m: "Adobe",    c: "subscriptions" }, // watch (>$20)
+    { firstSeenDaysAgo: 30, amt: -5499, desc: "ADOBE CREATIVE CLOUD", m: "Adobe",    c: "subscriptions" }, // watch (>$20)
   ];
   for (const s of newSubs) {
     const firstDate = subDays(today, s.firstSeenDaysAgo);
