@@ -66,24 +66,31 @@ export default async function DashboardPage(props: {
   if (profile && !profile.onboarded_at) redirect("/onboarding");
   const currency = (profile?.currency as string | null) ?? "USD";
 
-  const [intel, accountsQ, txCountQ] = await Promise.all([
-    fetchAndComputeIntelligence(supabase, user.id),
-    supabase
-      .from("accounts")
-      .select("id, name, current_balance_cents, is_archived")
-      .eq("user_id", user.id),
-    supabase
-      .from("transactions")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id),
-  ]);
-
-  const accounts = (accountsQ.data ?? []) as AccountRow[];
+  // Fetch accounts first so we know which IDs are active. The transaction
+  // count + intel both need that filter.
+  const { data: accountsData } = await supabase
+    .from("accounts")
+    .select("id, name, current_balance_cents, is_archived")
+    .eq("user_id", user.id);
+  const accounts = (accountsData ?? []) as AccountRow[];
   const activeAccounts = accounts.filter((a) => !a.is_archived);
+  const activeAccountIds = activeAccounts.map((a) => a.id);
   const netWorth = activeAccounts.reduce(
     (s, a) => s + (a.current_balance_cents ?? 0),
     0,
   );
+
+  const [intel, txCountQ] = await Promise.all([
+    fetchAndComputeIntelligence(supabase, user.id),
+    activeAccountIds.length === 0
+      ? Promise.resolve({ count: 0 } as { count: number | null })
+      : supabase
+          .from("transactions")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .in("account_id", activeAccountIds),
+  ]);
+
   const txCount = txCountQ.count ?? 0;
   const hasTransactions = txCount > 0;
 

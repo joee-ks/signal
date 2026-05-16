@@ -227,6 +227,17 @@ export async function fetchAndComputeIntelligence(
     bucket: string;
   }>;
 
+  // Filter transactions to only those belonging to non-archived accounts.
+  // Archived accounts are the user's way of saying "this data is no longer
+  // relevant" (e.g. they archived sample data after deciding to use Signal
+  // for real), so the engine ignores them entirely.
+  const archivedAccountIds = new Set(
+    accountRows.filter((a) => a.is_archived).map((a) => a.id),
+  );
+  const activeTxRows = txRows.filter(
+    (t) => !archivedAccountIds.has(t.account_id),
+  );
+
   return computeIntelligence({
     profile: {
       monthly_income_cents: profile?.monthly_income_cents ?? null,
@@ -244,7 +255,7 @@ export async function fetchAndComputeIntelligence(
       current_balance_cents: a.current_balance_cents ?? 0,
       is_archived: a.is_archived,
     })),
-    transactions: txRows.map((t) => ({
+    transactions: activeTxRows.map((t) => ({
       id: t.id,
       account_id: t.account_id,
       occurred_on: t.occurred_on,

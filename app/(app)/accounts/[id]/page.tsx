@@ -97,14 +97,62 @@ export default async function EditAccountPage(props: {
         </CardHeader>
         <CardContent>
           {account.is_archived ? (
-            <form action={unarchiveAccount}>
-              <input type="hidden" name="id" value={account.id} />
-              <p className="mb-3 text-sm text-muted-foreground">
-                This account is archived — hidden from totals, transactions
-                preserved.
-              </p>
-              <SubmitButton variant="outline">Unarchive account</SubmitButton>
-            </form>
+            <div className="space-y-6">
+              <form action={unarchiveAccount}>
+                <input type="hidden" name="id" value={account.id} />
+                <p className="mb-3 text-sm text-muted-foreground">
+                  This account is archived — hidden from totals and excluded
+                  from your dashboard, signals, and forecast. Transactions are
+                  preserved here but no longer affect your data.
+                </p>
+                <SubmitButton variant="outline">
+                  Unarchive account
+                </SubmitButton>
+              </form>
+
+              {hasTransactions && (
+                <form action={deleteAccount} className="space-y-4 border-t pt-6">
+                  <input type="hidden" name="id" value={account.id} />
+                  <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                    <p>
+                      Permanently delete this account and its{" "}
+                      {txCount} transaction{txCount === 1 ? "" : "s"}.
+                    </p>
+                    <p className="text-foreground">There is no undo.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm">
+                      Type{" "}
+                      <strong className="font-mono">DELETE</strong> to confirm
+                    </Label>
+                    <Input
+                      id="confirm"
+                      name="confirm"
+                      required
+                      placeholder="DELETE"
+                      pattern="DELETE"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <SubmitButton variant="destructive" pendingLabel="Deleting…">
+                    Permanently delete account
+                  </SubmitButton>
+                </form>
+              )}
+
+              {!hasTransactions && (
+                <form action={deleteAccount} className="border-t pt-6">
+                  <input type="hidden" name="id" value={account.id} />
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    This account has no transactions, so it can be deleted
+                    outright.
+                  </p>
+                  <SubmitButton variant="destructive" pendingLabel="Deleting…">
+                    Delete account
+                  </SubmitButton>
+                </form>
+              )}
+            </div>
           ) : hasTransactions ? (
             <form action={archiveAccount}>
               <input type="hidden" name="id" value={account.id} />

@@ -81,22 +81,63 @@ export async function unarchiveAccount(formData: FormData) {
 }
 
 /**
- * Hard-delete an account. Refuses if the account has any transactions —
- * use archive for those instead. Intended for cleaning up accidental dupes.
+ * Hard-delete an account.
+ *   - Active account, no transactions → delete (no confirm required)
+ *   - Active account, has transactions → refuse; user must archive first
+ *   - Archived account, any state → delete (cascades transactions);
+ *     requires typed "DELETE" confirmation when transactions exist
  */
 export async function deleteAccount(formData: FormData) {
-  const { id } = idSchema.parse(Object.fromEntries(formData));
-  const { supabase } = await requireUser();
+  const raw = Object.fromEntries(formData);
+  const { id } = idSchema.parse(raw);
+  const confirm = typeof raw.confirm === "string" ? raw.confirm : "";
+  const { supabase, user } = await requireUser();
+
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("id, is_archived")
+    .eq("id", id)
+    .maybeSingle();
+  if (!account) throw new Error("Account not found.");
+
   const { count } = await supabase
     .from("transactions")
     .select("id", { count: "exact", head: true })
     .eq("account_id", id);
-  if ((count ?? 0) > 0) {
+  const hasTransactions = (count ?? 0) > 0;
+
+  // Active account with transactions: must archive first.
+  if (hasTransactions && !account.is_archived) {
     throw new Error(
-      "Account has transactions — archive it instead of deleting.",
+      "Account has transactions — archive it before deleting.",
     );
   }
+
+  // Archived account with transactions: require typed confirmation.
+  if (hasTransactions && account.is_archived && confirm !== "DELETE") {
+    throw new Error("Type DELETE to confirm permanent deletion.");
+  }
+
+  // Cascade-delete transactions first (no FK on delete cascade between
+  // accounts and transactions; we manage it in app code).
+  if (hasTransactions) {
+    const { error: txErr } = await supabase
+      .from("transactions")
+      .delete()
+      .eq("account_id", id);
+    if (txErr) throw txErr;
+  }
+
   const { error } = await supabase.from("accounts").delete().eq("id", id);
   if (error) throw error;
+
+  // Invalidate the cached narrative — the underlying intel just changed materially.
+  if (hasTransactions) {
+    await supabase
+      .from("signals_snapshots")
+      .delete()
+      .eq("user_id", user.id);
+  }
+
   redirect("/accounts");
 }

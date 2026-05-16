@@ -48,7 +48,11 @@ export default async function TransactionsPage() {
   const accountNameMap = new Map(
     (accountsQ.data ?? []).map((a) => [a.id as string, a.name as string]),
   );
-  const txns: TxnRow[] = (txnsQ.data ?? []) as TxnRow[];
+  // Drop transactions whose account isn't in the active set (i.e. archived).
+  // accountsQ already filters out archived accounts, so the map check is enough.
+  const txns: TxnRow[] = ((txnsQ.data ?? []) as TxnRow[]).filter((t) =>
+    accountNameMap.has(t.account_id),
+  );
 
   return (
     <div className="space-y-6">
