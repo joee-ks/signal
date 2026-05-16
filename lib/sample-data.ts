@@ -1,6 +1,16 @@
 import { addDays, differenceInDays, format, subDays } from "date-fns";
 import type { Bucket } from "@/lib/categories";
 
+/**
+ * Start of the sample data window: the 1st of the month, 3 calendar months
+ * back from today. Always gives 3 fully-complete prior months + the current
+ * partial month — exactly the shape the intelligence engine needs to compute
+ * meaningful baselines without being dragged down by a partial first month.
+ */
+function periodStart(today: Date): Date {
+  return new Date(today.getFullYear(), today.getMonth() - 3, 1);
+}
+
 export type SampleTransaction = {
   occurred_on: string; // YYYY-MM-DD
   amount_cents: number; // signed
@@ -178,7 +188,7 @@ function generateBalanced(opts: { seed?: number } = {}): SampleTransaction[] {
   const rng = makeRng(opts.seed ?? 42);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = subDays(today, 90);
+  const start = periodStart(today);
   const out: SampleTransaction[] = [];
 
   pushBiweekly(out, rng, start, today, {
@@ -262,7 +272,7 @@ function generateTight(opts: { seed?: number } = {}): SampleTransaction[] {
   const rng = makeRng(opts.seed ?? 43);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = subDays(today, 90);
+  const start = periodStart(today);
   const out: SampleTransaction[] = [];
 
   // Bi-weekly $1,250 paychecks → ~$2,500/mo. Rent at $1,500 means
@@ -318,7 +328,7 @@ function generateVariable(opts: { seed?: number } = {}): SampleTransaction[] {
   const rng = makeRng(opts.seed ?? 44);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = subDays(today, 90);
+  const start = periodStart(today);
   const out: SampleTransaction[] = [];
 
   // Irregular gig deposits — 9 deposits, wildly varying amounts. CV should
@@ -326,8 +336,9 @@ function generateVariable(opts: { seed?: number } = {}): SampleTransaction[] {
   const depositAmounts = [
     120000, 80000, 240000, 180000, 320000, 140000, 200000, 95000, 280000,
   ];
+  const dayCount = differenceInDays(today, start);
   for (const amt of depositAmounts) {
-    const offset = Math.floor(rng() * 90);
+    const offset = Math.floor(rng() * (dayCount + 1));
     const d = addDays(start, offset);
     out.push({
       occurred_on: format(d, "yyyy-MM-dd"),
@@ -374,7 +385,7 @@ function generateSaver(opts: { seed?: number } = {}): SampleTransaction[] {
   const rng = makeRng(opts.seed ?? 45);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = subDays(today, 90);
+  const start = periodStart(today);
   const out: SampleTransaction[] = [];
 
   pushBiweekly(out, rng, start, today, {
