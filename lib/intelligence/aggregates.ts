@@ -41,12 +41,35 @@ export function getMonthlyBuckets(
   return result;
 }
 
-/** Sorted list of complete (non-current) month keys that have transactions. */
+/**
+ * Sorted list of calendar months whose data we trust to be complete:
+ *   - not the current month (still in progress), AND
+ *   - the user's transaction history extends at least back to the 1st of
+ *     that month (otherwise the month is partial and would drag averages
+ *     down — e.g. a 90-day window starting Feb 15 only has half of Feb).
+ */
 export function getCompleteMonths(ctx: IntelligenceContext): string[] {
   const monthly = getMonthlyBuckets(ctx.transactions);
   const current = monthKey(ctx.today);
+
+  let earliest: Date | null = null;
+  for (const t of ctx.transactions) {
+    const d = new Date(t.occurred_on + "T00:00:00");
+    if (!earliest || d < earliest) earliest = d;
+  }
+  if (!earliest) return [];
+
   return Array.from(monthly.keys())
     .filter((k) => k < current)
+    .filter((k) => {
+      const [yearStr, monthStr] = k.split("-");
+      const firstOfMonth = new Date(
+        parseInt(yearStr, 10),
+        parseInt(monthStr, 10) - 1,
+        1,
+      );
+      return firstOfMonth >= earliest!;
+    })
     .sort();
 }
 
