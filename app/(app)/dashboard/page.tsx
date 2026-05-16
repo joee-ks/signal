@@ -94,25 +94,14 @@ export default async function DashboardPage(props: {
   const txCount = txCountQ.count ?? 0;
   const hasTransactions = txCount > 0;
 
-  // Sample-data detection: any account whose name starts with "Sample" is
-  // considered sample. The switcher card is shown when the user has txns but
-  // none of them live outside sample accounts.
-  const sampleAccountIds = accounts
-    .filter((a) => a.name.startsWith("Sample"))
-    .map((a) => a.id);
-  let realTxQ = supabase
-    .from("transactions")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id);
-  if (sampleAccountIds.length > 0) {
-    realTxQ = realTxQ.not(
-      "account_id",
-      "in",
-      `(${sampleAccountIds.join(",")})`,
-    );
-  }
-  const { count: realTxCount } = await realTxQ;
-  const showPersonaSwitcher = hasTransactions && (realTxCount ?? 0) === 0;
+  // Sample-data detection: the persona switcher shows when the user has txns
+  // (so the dashboard isn't in its blank empty state) but no active account
+  // of their own. As soon as they add their own (non-Sample-prefixed)
+  // account, the switcher hides.
+  const hasOwnAccount = accounts.some(
+    (a) => !a.is_archived && !a.name.startsWith("Sample"),
+  );
+  const showPersonaSwitcher = hasTransactions && !hasOwnAccount;
 
   const topPatterns = intel.patterns.slice(0, 3);
   const remainingPatterns = intel.patterns.length - topPatterns.length;
@@ -150,7 +139,11 @@ export default async function DashboardPage(props: {
       ) : (
         <>
           <Suspense fallback={<NarrativeSkeleton />}>
-            <NarrativeBlock userId={user.id} intel={intel} />
+            <NarrativeBlock
+              userId={user.id}
+              intel={intel}
+              currency={currency}
+            />
           </Suspense>
 
           {/* Hero: Health score + sub-scores */}
@@ -351,7 +344,7 @@ function PersonaPicker({ variant }: { variant: "empty" | "switcher" }) {
         <CardDescription>
           You&apos;re viewing sample data. Switch to a different persona to see
           how the engine and narrative respond — this wipes the previous sample
-          data. Adding your own transaction will hide this section.
+          data. Adding your own account will hide this section.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -377,13 +370,17 @@ function PersonaPicker({ variant }: { variant: "empty" | "switcher" }) {
 async function NarrativeBlock({
   userId,
   intel,
+  currency,
 }: {
   userId: string;
   intel: IntelligenceResult;
+  currency: string;
 }) {
   const supabase = await createClient();
   try {
-    const result = await getOrGenerateNarrative(supabase, userId, intel);
+    const result = await getOrGenerateNarrative(supabase, userId, intel, {
+      currency,
+    });
     return (
       <NarrativeCard
         narrative={result.narrative}

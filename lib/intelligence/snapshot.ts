@@ -17,11 +17,15 @@ const SOFT_TTL_MS = 30 * 60 * 1000; // 30 minutes
  * change the narrative. We bucket continuous numbers (e.g. balance to the
  * nearest $100) so small fluctuations don't bust the cache.
  *
+ * Currency is included so changing it (USD → EUR, etc.) invalidates the
+ * cache and forces Claude to regenerate with the right symbol.
+ *
  * If this hash matches the cached snapshot's shape_hash AND the snapshot is
  * fresher than the soft TTL, we reuse the cached narrative.
  */
-export function shapeHash(intel: IntelligenceResult): string {
+export function shapeHash(intel: IntelligenceResult, currency: string): string {
   const shape = {
+    c: currency,
     h: intel.health.total,
     s: Object.fromEntries(
       Object.entries(intel.health.sub_scores).map(([k, v]) => [k, v.score]),
@@ -143,9 +147,10 @@ export async function getOrGenerateNarrative(
   supabase: SupaClient,
   userId: string,
   intel: IntelligenceResult,
-  options: { force?: boolean } = {},
+  options: { force?: boolean; currency?: string } = {},
 ): Promise<NarrativeFetchResult> {
-  const currentHash = shapeHash(intel);
+  const currency = options.currency ?? "USD";
+  const currentHash = shapeHash(intel, currency);
 
   if (!options.force) {
     const cached = await loadCached(supabase, userId);
@@ -162,7 +167,7 @@ export async function getOrGenerateNarrative(
     }
   }
 
-  const narrative = await generateNarrative(intel);
+  const narrative = await generateNarrative(intel, { currency });
   const generated_at = await writeSnapshot(
     supabase,
     userId,

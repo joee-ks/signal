@@ -58,3 +58,33 @@ export async function completeOnboarding(formData: FormData) {
 
   redirect("/dashboard");
 }
+
+/**
+ * Bypass the onboarding form — marks the profile onboarded without setting
+ * income or creating an account. The user lands on the dashboard's empty
+ * state where they can load a sample persona or wire up their own accounts
+ * from `/accounts/new` and update income later via `/settings`.
+ */
+export async function skipOnboarding() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("onboarded_at")
+    .eq("id", user.id)
+    .single();
+  if (profile?.onboarded_at) {
+    redirect("/dashboard");
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ onboarded_at: new Date().toISOString() })
+    .eq("id", user.id);
+  if (error) throw error;
+  redirect("/dashboard");
+}

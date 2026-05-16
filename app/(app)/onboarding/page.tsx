@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { completeOnboarding } from "./_actions";
+import { completeOnboarding, skipOnboarding } from "./_actions";
 import {
   Card,
   CardContent,
@@ -126,6 +126,19 @@ export default async function OnboardingPage() {
           </form>
         </CardContent>
       </Card>
+
+      <form action={skipOnboarding} className="text-center">
+        <SubmitButton
+          variant="link"
+          size="sm"
+          pendingLabel="Skipping…"
+        >
+          Skip setup — explore with sample data first →
+        </SubmitButton>
+        <p className="mt-1 text-xs text-muted-foreground">
+          You can always add your income and accounts later in Settings.
+        </p>
+      </form>
     </div>
   );
 }

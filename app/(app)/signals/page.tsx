@@ -59,7 +59,11 @@ export default async function SignalsPage() {
       </div>
 
       <Suspense fallback={<NarrativeSkeleton />}>
-        <NarrativeBlock userId={user.id} intel={intel} />
+        <NarrativeBlock
+          userId={user.id}
+          intel={intel}
+          currency={currency}
+        />
       </Suspense>
 
       {/* All patterns */}
@@ -185,7 +189,7 @@ export default async function SignalsPage() {
             <span className="block">
               The numbers and patterns above are computed by deterministic
               TypeScript — no AI, no third-party data. The narrative at the top
-              is the only place Claude is involved; it&apos;s a plain-English
+              is the only place AI is involved; it&apos;s a plain-English
               read of the same structured signals.
             </span>
             <span className="block">
@@ -203,13 +207,17 @@ export default async function SignalsPage() {
 async function NarrativeBlock({
   userId,
   intel,
+  currency,
 }: {
   userId: string;
   intel: IntelligenceResult;
+  currency: string;
 }) {
   const supabase = await createClient();
   try {
-    const result = await getOrGenerateNarrative(supabase, userId, intel);
+    const result = await getOrGenerateNarrative(supabase, userId, intel, {
+      currency,
+    });
     return (
       <NarrativeCard
         narrative={result.narrative}

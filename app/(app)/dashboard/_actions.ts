@@ -7,6 +7,7 @@ import {
   fetchAndComputeIntelligence,
   getOrGenerateNarrative,
 } from "@/lib/intelligence/snapshot";
+import { getUserCurrency } from "@/lib/profile";
 
 export async function recomputeNarrative() {
   const supabase = await createClient();
@@ -15,8 +16,14 @@ export async function recomputeNarrative() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const intel = await fetchAndComputeIntelligence(supabase, user.id);
-  await getOrGenerateNarrative(supabase, user.id, intel, { force: true });
+  const [intel, currency] = await Promise.all([
+    fetchAndComputeIntelligence(supabase, user.id),
+    getUserCurrency(supabase, user.id),
+  ]);
+  await getOrGenerateNarrative(supabase, user.id, intel, {
+    force: true,
+    currency,
+  });
   redirect("/dashboard?info=recomputed");
 }
 

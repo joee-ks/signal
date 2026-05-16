@@ -1,4 +1,5 @@
 import { isVariableCategory, labelFor } from "@/lib/categories";
+import { formatCents } from "@/lib/format";
 import {
   avgMonthlyBucket,
   daysBetween,
@@ -11,6 +12,11 @@ import type {
   Pattern,
   RecurringCharge,
 } from "./types";
+
+/** Currency-aware money formatter for pattern detail strings. */
+function money(ctx: IntelligenceContext, cents: number): string {
+  return formatCents(cents, { currency: ctx.profile.currency });
+}
 
 const SEVERITY_RANK: Record<Pattern["severity"], number> = {
   high: 0,
@@ -55,12 +61,11 @@ function detectSubscriptionCreep(
     const since = daysBetween(r.first_seen, ctx.today);
     if (since > 35) continue;
 
-    const dollars = (r.monthly_equivalent_cents / 100).toFixed(2);
     results.push({
       kind: "subscription_creep",
       severity: r.monthly_equivalent_cents > 2000 ? "watch" : "info",
       title: `New recurring charge: ${r.sample_description}`,
-      detail: `Started about ${since} day${since === 1 ? "" : "s"} ago — roughly $${dollars}/mo, ${r.cadence}. Worth a sanity-check that you still want it.`,
+      detail: `Started about ${since} day${since === 1 ? "" : "s"} ago — roughly ${money(ctx, r.monthly_equivalent_cents)}/mo, ${r.cadence}. Worth a sanity-check that you still want it.`,
       evidence: {
         merchant: r.sample_description,
         monthly_cents: r.monthly_equivalent_cents,
@@ -105,7 +110,7 @@ function detectLifestyleInflation(ctx: IntelligenceContext): Pattern[] {
       kind: "lifestyle_inflation",
       severity: growthPct > 100 ? "high" : "watch",
       title: `${labelFor(cat)} spending is climbing`,
-      detail: `$${(recentCents / 100).toFixed(2)} in the last 30 days vs $${(priorMonthly / 100).toFixed(2)}/mo before that (+${growthPct}%).`,
+      detail: `${money(ctx, recentCents)} in the last 30 days vs ${money(ctx, Math.round(priorMonthly))}/mo before that (+${growthPct}%).`,
       evidence: {
         category: cat,
         recent_30d_cents: recentCents,
@@ -145,7 +150,7 @@ function detectThousandCuts(ctx: IntelligenceContext): Pattern[] {
       kind: "thousand_cuts",
       severity: sum > income * 0.2 ? "high" : "watch",
       title: "A lot of small spends are adding up",
-      detail: `${count} small charges (under $15 each) totaled $${(sum / 100).toFixed(2)} in the last 30 days — about ${pct}% of your monthly income.`,
+      detail: `${count} small charges (under ${money(ctx, 1500)} each) totaled ${money(ctx, sum)} in the last 30 days — about ${pct}% of your monthly income.`,
       evidence: { count, sum_cents: sum, pct_of_income: pct },
     },
   ];
@@ -283,7 +288,7 @@ function detectAnomalies(ctx: IntelligenceContext): Pattern[] {
       kind: "anomaly",
       severity: z > 3.5 ? "high" : "watch",
       title: `${labelFor(cat)} is higher than usual for this point in the month`,
-      detail: `$${(currentByToday / 100).toFixed(2)} spent so far vs your typical $${(mean / 100).toFixed(2)} by day ${dayOfMonth} (+${pctDisplay}%).`,
+      detail: `${money(ctx, currentByToday)} spent so far vs your typical ${money(ctx, Math.round(mean))} by day ${dayOfMonth} (+${pctDisplay}%).`,
       evidence: {
         category: cat,
         current_cents_by_today: Math.round(currentByToday),
@@ -316,7 +321,7 @@ function detectDiscretionaryShare(ctx: IntelligenceContext): Pattern[] {
       kind: "discretionary_share",
       severity: share > 0.5 ? "high" : "watch",
       title: "Discretionary is a big slice of your outflow",
-      detail: `Over the last 3 months, ${Math.round(share * 100)}% of your non-transfer spending was discretionary — about $${(discretionary / 100).toFixed(2)}/mo.`,
+      detail: `Over the last 3 months, ${Math.round(share * 100)}% of your non-transfer spending was discretionary — about ${money(ctx, Math.round(discretionary))}/mo.`,
       evidence: {
         share_pct: Math.round(share * 100),
         discretionary_monthly_cents: Math.round(discretionary),

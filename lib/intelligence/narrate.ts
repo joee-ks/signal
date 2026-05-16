@@ -1,5 +1,24 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { formatCents } from "@/lib/format";
 import type { IntelligenceResult } from "./types";
+
+/** Best-effort symbol lookup for the currency-instruction line in the prompt. */
+function currencySymbol(currency: string): string {
+  switch (currency.toUpperCase()) {
+    case "USD":
+    case "CAD":
+    case "AUD":
+      return "$";
+    case "EUR":
+      return "€";
+    case "GBP":
+      return "£";
+    case "CHF":
+      return "CHF";
+    default:
+      return currency;
+  }
+}
 
 export const NARRATIVE_MODEL =
   process.env.ANTHROPIC_NARRATIVE_MODEL ?? "claude-haiku-4-5";
@@ -94,7 +113,7 @@ Always respond by calling the \`provide_narrative\` tool with all four fields fi
 
 export async function generateNarrative(
   intel: IntelligenceResult,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; currency?: string },
 ): Promise<Narrative> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not set");
@@ -104,7 +123,8 @@ export async function generateNarrative(
     apiKey: process.env.ANTHROPIC_API_KEY,
   });
 
-  const userInput = buildNarrativeInput(intel);
+  const currency = options?.currency ?? "USD";
+  const userInput = buildNarrativeInput(intel, currency);
 
   const response = await client.messages.create(
     {
@@ -181,12 +201,20 @@ export async function generateNarrative(
 }
 
 /** Compact, redacted text representation of the intelligence result. */
-function buildNarrativeInput(intel: IntelligenceResult): string {
+function buildNarrativeInput(
+  intel: IntelligenceResult,
+  currency: string,
+): string {
   const { health, patterns, forecast, recurring, metrics } = intel;
-  const D = (cents: number) => `$${(cents / 100).toFixed(0)}`;
+  const D = (cents: number) => formatCents(cents, { currency });
+  const symbol = currencySymbol(currency);
   const lines: string[] = [];
 
   lines.push("=== USER FINANCIAL SNAPSHOT ===", "");
+  lines.push(
+    `Currency: ${currency} — use "${symbol}" (or the appropriate symbol/code) for ALL amount references in your response. Do not use "$" unless the user's currency is USD/CAD/AUD.`,
+    "",
+  );
 
   lines.push("Profile / metrics:");
   lines.push(`  monthly_income: ${D(metrics.monthly_income_cents)}`);
