@@ -275,8 +275,8 @@ function generateTight(opts: { seed?: number } = {}): SampleTransaction[] {
   const start = periodStart(today);
   const out: SampleTransaction[] = [];
 
-  // Bi-weekly $1,250 paychecks → ~$2,500/mo. Rent at $1,500 means
-  // essentials sit around 80% of income — actually tight.
+  // Bi-weekly $1,250 paychecks → ~$2,500/mo. Rent at $1,600 puts essentials
+  // around 85% of income — visible shortfall on the shock-resilience forecast.
   pushBiweekly(out, rng, start, today, {
     amount_cents: 125000,
     jitter_pct: 0.02,
@@ -288,7 +288,7 @@ function generateTight(opts: { seed?: number } = {}): SampleTransaction[] {
 
   pushMonthly(out, rng, start, today, 3, {
     day: 1,
-    amount_cents: -150000,
+    amount_cents: -160000,
     description: "RENT PAYMENT - SUNRISE MGMT",
     merchant: "Landlord",
     category: "housing",
@@ -450,7 +450,7 @@ export const PERSONAS: readonly Persona[] = [
     id: "tight",
     label: "Tight budget",
     description:
-      "Essentials eat ~80% of income; near-zero cash buffer; student-loan debt — visible stress across buffer, commitment-load, and shock sub-scores.",
+      "Essentials eat ~85% of income; near-zero cash buffer; student-loan debt; underwater on the 20%-shock test — visible stress across buffer, commitment-load, and shock sub-scores plus a clear shock-drop deficit.",
     monthly_income_cents: 250000,
     starting_balance_cents: 30000,
     generate: generateTight,
