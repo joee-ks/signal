@@ -80,9 +80,12 @@ export function detectRecurring(txns: Transaction[]): RecurringCharge[] {
       amounts.reduce((a, b) => a + b, 0) / amounts.length;
     if (avgAmount <= 0) continue;
 
-    // Amount consistency: every observation within ±25% of the group mean.
+    // Amount consistency: every observation within ±20% of the group mean.
+    // Tighter than 25% to reject random grocery/coffee pairs that happen to
+    // land at similar amounts; still loose enough for utility bills with
+    // moderate seasonal variation.
     const consistent = amounts.every(
-      (a) => Math.abs(a - avgAmount) / avgAmount <= 0.25,
+      (a) => Math.abs(a - avgAmount) / avgAmount <= 0.2,
     );
     if (!consistent) continue;
 

@@ -1,4 +1,4 @@
-import { labelFor } from "@/lib/categories";
+import { isVariableCategory, labelFor } from "@/lib/categories";
 import {
   avgMonthlyBucket,
   daysBetween,
@@ -47,6 +47,11 @@ function detectSubscriptionCreep(
   for (const r of recurring) {
     if (r.direction !== "out") continue;
     if (r.cadence !== "monthly" && r.cadence !== "yearly") continue;
+    // Suppress variable-spending categories (groceries, dining, coffee,
+    // shopping, etc.) — a "monthly recurring" pattern there is almost
+    // always a coincidence of two transactions at similar amounts ~30
+    // days apart, not a real new subscription.
+    if (isVariableCategory(r.category)) continue;
     const since = daysBetween(r.first_seen, ctx.today);
     if (since > 35) continue;
 
