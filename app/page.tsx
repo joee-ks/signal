@@ -29,7 +29,9 @@ export default async function Home(props: {
           </p>
           <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
             <Button
-              render={<Link href="/login">Get started — it&apos;s free</Link>}
+              render={
+                <Link href="/login?mode=signup">Get started — it&apos;s free</Link>
+              }
               size="lg"
             />
             <Button
@@ -88,7 +90,10 @@ export default async function Home(props: {
           <h2 className="text-2xl font-semibold tracking-tight">
             Replace guesswork with intelligence.
           </h2>
-          <Button render={<Link href="/login">Get started</Link>} size="lg" />
+          <Button
+            render={<Link href="/login?mode=signup">Get started</Link>}
+            size="lg"
+          />
         </section>
       </main>
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,71 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+type Mode = "signin" | "signup";
+
+const COPY: Record<
+  Mode,
+  {
+    title: string;
+    description: string;
+    submit: string;
+    submitting: string;
+    sentTitle: string;
+    sentDescription: (email: string) => React.ReactNode;
+    switchPrompt: string;
+    switchLink: string;
+    switchHref: string;
+  }
+> = {
+  signin: {
+    title: "Sign in",
+    description:
+      "Enter your email and we'll send you a secure sign-in link — no password needed.",
+    submit: "Send sign-in link",
+    submitting: "Sending…",
+    sentTitle: "Check your email",
+    sentDescription: (email) => (
+      <>
+        We sent a sign-in link to <strong>{email}</strong>. Open it on this
+        device to continue.
+      </>
+    ),
+    switchPrompt: "New to Signal?",
+    switchLink: "Create an account",
+    switchHref: "/login?mode=signup",
+  },
+  signup: {
+    title: "Create your account",
+    description:
+      "Enter your email and we'll send you a sign-up link — no password needed.",
+    submit: "Create account",
+    submitting: "Sending…",
+    sentTitle: "Confirm your email",
+    sentDescription: (email) => (
+      <>
+        We sent a confirmation link to <strong>{email}</strong>. Open it on
+        this device to finish creating your account.
+      </>
+    ),
+    switchPrompt: "Already have an account?",
+    switchLink: "Sign in",
+    switchHref: "/login",
+  },
+};
+
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
+  const searchParams = useSearchParams();
+  const mode: Mode = searchParams.get("mode") === "signup" ? "signup" : "signin";
+  const copy = COPY[mode];
+
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -56,10 +121,9 @@ export default function LoginPage() {
           {sent ? (
             <>
               <CardHeader>
-                <CardTitle>Check your email</CardTitle>
+                <CardTitle>{copy.sentTitle}</CardTitle>
                 <CardDescription>
-                  We sent a sign-in link to <strong>{email.trim()}</strong>. Open
-                  it on this device to continue.
+                  {copy.sentDescription(email.trim())}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -75,11 +139,8 @@ export default function LoginPage() {
           ) : (
             <>
               <CardHeader>
-                <CardTitle>Sign in</CardTitle>
-                <CardDescription>
-                  Enter your email and we&apos;ll send you a secure link — no
-                  password needed.
-                </CardDescription>
+                <CardTitle>{copy.title}</CardTitle>
+                <CardDescription>{copy.description}</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -97,13 +158,23 @@ export default function LoginPage() {
                     />
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Sending…" : "Send sign-in link"}
+                    {loading ? copy.submitting : copy.submit}
                   </Button>
                 </form>
               </CardContent>
             </>
           )}
         </Card>
+
+        <p className="text-center text-sm text-muted-foreground">
+          {copy.switchPrompt}{" "}
+          <Link
+            href={copy.switchHref}
+            className="font-medium text-foreground underline-offset-4 hover:underline"
+          >
+            {copy.switchLink}
+          </Link>
+        </p>
 
         <p className="text-center text-xs text-muted-foreground">
           Signal provides information, not financial advice.
