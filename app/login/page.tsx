@@ -30,6 +30,9 @@ const COPY: Record<
     switchPrompt: string;
     switchLink: string;
     switchHref: string;
+    wrongModeMessage: string;
+    wrongModeLink: string;
+    wrongModeHref: string;
   }
 > = {
   signin: {
@@ -48,6 +51,9 @@ const COPY: Record<
     switchPrompt: "New to Signal?",
     switchLink: "Create an account",
     switchHref: "/login?mode=signup",
+    wrongModeMessage: "No Signal account is registered to that email.",
+    wrongModeLink: "Create an account",
+    wrongModeHref: "/login?mode=signup",
   },
   signup: {
     title: "Create your account",
@@ -65,6 +71,9 @@ const COPY: Record<
     switchPrompt: "Already have an account?",
     switchLink: "Sign in",
     switchHref: "/login",
+    wrongModeMessage: "That email is already registered.",
+    wrongModeLink: "Sign in instead",
+    wrongModeHref: "/login",
   },
 };
 
@@ -84,13 +93,37 @@ function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [wrongMode, setWrongMode] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = email.trim();
     if (!trimmed) return;
+
+    setWrongMode(false);
     setLoading(true);
     const supabase = createClient();
+
+    // Pre-flight: does the email already have an account? Drives the
+    // "already registered" vs "no account found" guidance for each mode.
+    // If the RPC itself fails (e.g. migration not run yet), we fall through
+    // to the normal flow so the page stays usable.
+    const { data: existsRaw } = await supabase.rpc("email_has_account", {
+      p_email: trimmed,
+    });
+    const exists = typeof existsRaw === "boolean" ? existsRaw : null;
+
+    if (mode === "signup" && exists === true) {
+      setLoading(false);
+      setWrongMode(true);
+      return;
+    }
+    if (mode === "signin" && exists === false) {
+      setLoading(false);
+      setWrongMode(true);
+      return;
+    }
+
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
       options: {
@@ -130,7 +163,10 @@ function LoginPageContent() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => setSent(false)}
+                  onClick={() => {
+                    setSent(false);
+                    setWrongMode(false);
+                  }}
                 >
                   Use a different email
                 </Button>
@@ -152,11 +188,25 @@ function LoginPageContent() {
                       autoComplete="email"
                       placeholder="you@example.com"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (wrongMode) setWrongMode(false);
+                      }}
                       required
                       disabled={loading}
                     />
                   </div>
+                  {wrongMode && (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                      {copy.wrongModeMessage}{" "}
+                      <Link
+                        href={copy.wrongModeHref}
+                        className="font-medium underline underline-offset-4 hover:text-foreground"
+                      >
+                        {copy.wrongModeLink} →
+                      </Link>
+                    </div>
+                  )}
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? copy.submitting : copy.submit}
                   </Button>
