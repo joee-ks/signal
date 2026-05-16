@@ -149,7 +149,20 @@ function scoreDiscretionary(ctx: IntelligenceContext): SubScore {
   return { score: clamp(Math.round(score)) };
 }
 
-/** "If your income drops 20%, does it still cover essentials?" */
+/**
+ * "If your income drops 20%, how comfortably does it still cover essentials?"
+ *
+ * Graduated by the ratio of shock-adjusted income to monthly essentials:
+ *   >= 2.0   → 100  (comfortable double coverage)
+ *   1.5–2.0  → 80–100
+ *   1.0–1.5  → 50–80   (clears but tight)
+ *   0.7–1.0  → 20–50   (small shortfall)
+ *   < 0.7    → 0–20    (deep shortfall)
+ *
+ * The previous version returned a flat 100 the moment shock-income cleared
+ * essentials by any margin, which made the sub-score uninformative for users
+ * whose essentials sat anywhere below 80% of income.
+ */
 function scoreShock(ctx: IntelligenceContext): SubScore {
   const income = deriveMonthlyIncome(ctx);
   if (income <= 0) return { score: null, reason: "Set your monthly income" };
@@ -158,11 +171,16 @@ function scoreShock(ctx: IntelligenceContext): SubScore {
   if (essential <= 0) return { score: 100 };
 
   const shockIncome = income * 0.8;
-  if (shockIncome >= essential) return { score: 100 };
+  const ratio = shockIncome / essential;
 
-  const deficit = essential - shockIncome;
-  const ratio = deficit / income;
-  return { score: clamp(Math.round(100 - ratio * 250)) };
+  let score: number;
+  if (ratio >= 2.0) score = 100;
+  else if (ratio >= 1.5) score = 80 + ((ratio - 1.5) / 0.5) * 20;
+  else if (ratio >= 1.0) score = 50 + ((ratio - 1.0) / 0.5) * 30;
+  else if (ratio >= 0.7) score = 20 + ((ratio - 0.7) / 0.3) * 30;
+  else score = (ratio / 0.7) * 20;
+
+  return { score: clamp(Math.round(score)) };
 }
 
 function clamp(n: number, lo = 0, hi = 100): number {
