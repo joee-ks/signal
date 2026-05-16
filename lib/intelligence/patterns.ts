@@ -187,13 +187,30 @@ function detectIncomeIrregularity(ctx: IntelligenceContext): Pattern[] {
 
 // ----------------------------------------------------------------------------
 // 5. Personal-baseline anomaly — this month's category is >2σ above its 6-mo norm
+//
+// The current month is usually partial, so we pro-rate it (current ×
+// days_in_month / day_of_month) and compare the *projected* full-month
+// number against the prior full-month baseline. Skipped in the first week
+// of the month because tiny samples extrapolated to a full month produce
+// noisy false positives.
 // ----------------------------------------------------------------------------
 function detectAnomalies(ctx: IntelligenceContext): Pattern[] {
+  const today = ctx.today;
+  const dayOfMonth = today.getDate();
+  if (dayOfMonth < 7) return [];
+
+  const daysInMonth = new Date(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    0,
+  ).getDate();
+  const projectionFactor = daysInMonth / dayOfMonth;
+
   const monthly = getMonthlyBuckets(ctx.transactions);
   const months = Array.from(monthly.keys()).sort();
   if (months.length < 3) return [];
 
-  const currentKey = monthKey(ctx.today);
+  const currentKey = monthKey(today);
 
   // Per-category totals per month.
   const catByMonth = new Map<string, Map<string, number>>();
@@ -213,13 +230,13 @@ function detectAnomalies(ctx: IntelligenceContext): Pattern[] {
   if (priorMonths.length < 2) return [];
 
   const results: Pattern[] = [];
-  for (const [cat, currentCents] of currentMonth) {
+  for (const [cat, currentCentsRaw] of currentMonth) {
     const priorCents = priorMonths.map(
       (m) => catByMonth.get(m)?.get(cat) ?? 0,
     );
     const mean =
       priorCents.reduce((a, b) => a + b, 0) / priorCents.length;
-    if (mean < 2000) continue; // ignore tiny categories
+    if (mean < 2000) continue; // ignore tiny categories (< $20/mo baseline)
 
     const variance =
       priorCents.reduce((s, c) => s + (c - mean) ** 2, 0) /
@@ -227,20 +244,26 @@ function detectAnomalies(ctx: IntelligenceContext): Pattern[] {
     const stdev = Math.sqrt(variance);
     if (stdev === 0) continue;
 
-    const z = (currentCents - mean) / stdev;
+    // Project to a full-month equivalent before comparing to the baseline.
+    const projected = currentCentsRaw * projectionFactor;
+
+    const z = (projected - mean) / stdev;
     if (z <= 2.0) continue;
 
-    const pctOver = Math.round((currentCents / mean - 1) * 100);
+    const pctOver = Math.round((projected / mean - 1) * 100);
     results.push({
       kind: "anomaly",
       severity: z > 3.0 ? "high" : "watch",
-      title: `${labelFor(cat)} is unusually high this month`,
-      detail: `$${(currentCents / 100).toFixed(2)} so far vs your typical $${(mean / 100).toFixed(2)}/mo (+${pctOver}%).`,
+      title: `${labelFor(cat)} is tracking unusually high this month`,
+      detail: `At your current pace this month is heading toward ~$${(projected / 100).toFixed(2)} vs your typical $${(mean / 100).toFixed(2)}/mo (+${pctOver}%).`,
       evidence: {
         category: cat,
-        current_cents: Math.round(currentCents),
+        current_cents_so_far: Math.round(currentCentsRaw),
+        projected_full_month_cents: Math.round(projected),
         prior_monthly_avg_cents: Math.round(mean),
         z_score: Math.round(z * 10) / 10,
+        day_of_month: dayOfMonth,
+        days_in_month: daysInMonth,
       },
     });
   }
