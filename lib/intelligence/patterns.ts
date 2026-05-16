@@ -266,21 +266,30 @@ function detectAnomalies(ctx: IntelligenceContext): Pattern[] {
     if (stdev === 0) continue;
 
     const z = (currentByToday - mean) / stdev;
-    // 2.5σ rather than 2.0σ to absorb the inherent noise of having only
-    // a handful of prior months as the baseline.
+    const pctOver = (currentByToday - mean) / mean;
+    // Require BOTH conditions:
+    //   - z > 2.5 (statistical significance vs prior months)
+    //   - pctOver >= 0.30 (at least 30% above baseline — common-sense filter)
+    //
+    // The pct floor matters because tight-distribution categories (e.g. a
+    // utility bill at $120 ± 5%) can produce huge z-scores from tiny
+    // absolute deviations: a $8 swing on a $120 bill is 2.7σ in a tight
+    // sample but only 7% over normal — not a meaningful anomaly.
     if (z <= 2.5) continue;
+    if (pctOver < 0.3) continue;
 
-    const pctOver = Math.round((currentByToday / mean - 1) * 100);
+    const pctDisplay = Math.round(pctOver * 100);
     results.push({
       kind: "anomaly",
       severity: z > 3.5 ? "high" : "watch",
       title: `${labelFor(cat)} is higher than usual for this point in the month`,
-      detail: `$${(currentByToday / 100).toFixed(2)} spent so far vs your typical $${(mean / 100).toFixed(2)} by day ${dayOfMonth} (+${pctOver}%).`,
+      detail: `$${(currentByToday / 100).toFixed(2)} spent so far vs your typical $${(mean / 100).toFixed(2)} by day ${dayOfMonth} (+${pctDisplay}%).`,
       evidence: {
         category: cat,
         current_cents_by_today: Math.round(currentByToday),
         prior_avg_cents_by_today: Math.round(mean),
         z_score: Math.round(z * 10) / 10,
+        pct_over_baseline: pctDisplay,
         day_of_month: dayOfMonth,
         prior_months_sampled: priorMonths.length,
       },
