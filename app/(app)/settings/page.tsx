@@ -19,6 +19,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { dollarsFromCents } from "@/lib/format";
 import { DEFAULT_CURRENCY, SUPPORTED_CURRENCIES } from "@/lib/profile";
 
+export const metadata = { title: "Settings" };
+
 export default async function SettingsPage(props: {
   searchParams: Promise<{
     saved?: string;

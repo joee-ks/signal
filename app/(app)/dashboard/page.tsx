@@ -46,6 +46,8 @@ type AccountRow = {
   is_archived: boolean;
 };
 
+export const metadata = { title: "Dashboard" };
+
 export default async function DashboardPage(props: {
   searchParams: Promise<{ info?: string }>;
 }) {

@@ -15,6 +15,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 import { dollarsFromCents } from "@/lib/format";
 
+export const metadata = { title: "Edit account" };
+
 export default async function EditAccountPage(props: {
   params: Promise<{ id: string }>;
 }) {

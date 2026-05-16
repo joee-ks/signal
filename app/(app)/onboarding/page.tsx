@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 
+export const metadata = { title: "Welcome" };
+
 export default async function OnboardingPage() {
   const supabase = await createClient();
   const {

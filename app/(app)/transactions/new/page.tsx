@@ -10,6 +10,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 import { CATEGORIES } from "@/lib/categories";
 
+export const metadata = { title: "Add transaction" };
+
 export default async function NewTransactionPage() {
   const supabase = await createClient();
   const {

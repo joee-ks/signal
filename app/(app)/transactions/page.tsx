@@ -18,6 +18,8 @@ type TxnRow = {
   is_recurring: boolean;
 };
 
+export const metadata = { title: "Transactions" };
+
 export default async function TransactionsPage() {
   const supabase = await createClient();
   const {

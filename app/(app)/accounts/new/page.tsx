@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 
+export const metadata = { title: "Add account" };
+
 export default function NewAccountPage() {
   return (
     <div className="mx-auto max-w-md">

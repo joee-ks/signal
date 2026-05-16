@@ -23,6 +23,8 @@ type AccountRow = {
   is_archived: boolean;
 };
 
+export const metadata = { title: "Accounts" };
+
 export default async function AccountsPage() {
   const supabase = await createClient();
   const {

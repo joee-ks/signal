@@ -31,6 +31,8 @@ const CADENCE_LABEL: Record<string, string> = {
   yearly: "yearly",
 };
 
+export const metadata = { title: "Signals" };
+
 export default async function SignalsPage() {
   const supabase = await createClient();
   const {

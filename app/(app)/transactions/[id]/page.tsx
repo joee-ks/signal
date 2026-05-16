@@ -20,6 +20,8 @@ type TxnRow = {
   account_id: string;
 };
 
+export const metadata = { title: "Edit transaction" };
+
 export default async function EditTransactionPage(props: {
   params: Promise<{ id: string }>;
 }) {
