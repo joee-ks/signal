@@ -21,6 +21,7 @@ import {
 } from "@/components/narrative-card";
 import { formatCents } from "@/lib/format";
 import { labelFor } from "@/lib/categories";
+import { getUserCurrency } from "@/lib/profile";
 import type { IntelligenceResult } from "@/lib/intelligence/types";
 
 const CADENCE_LABEL: Record<string, string> = {
@@ -37,7 +38,10 @@ export default async function SignalsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const intel = await fetchAndComputeIntelligence(supabase, user.id);
+  const [intel, currency] = await Promise.all([
+    fetchAndComputeIntelligence(supabase, user.id),
+    getUserCurrency(supabase, user.id),
+  ]);
 
   const recurringOut = intel.recurring.filter((r) => r.direction === "out");
   const recurringIn = intel.recurring.filter((r) => r.direction === "in");
@@ -118,10 +122,10 @@ export default async function SignalsPage() {
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold tabular-nums">
-                      {formatCents(-r.typical_amount_cents)}
+                      {formatCents(-r.typical_amount_cents, { currency })}
                     </p>
                     <p className="text-xs text-muted-foreground tabular-nums">
-                      ~{formatCents(-r.monthly_equivalent_cents)}/mo
+                      ~{formatCents(-r.monthly_equivalent_cents, { currency })}/mo
                     </p>
                   </div>
                 </li>
@@ -159,10 +163,10 @@ export default async function SignalsPage() {
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                      +{formatCents(r.typical_amount_cents)}
+                      +{formatCents(r.typical_amount_cents, { currency })}
                     </p>
                     <p className="text-xs text-muted-foreground tabular-nums">
-                      ~{formatCents(r.monthly_equivalent_cents)}/mo
+                      ~{formatCents(r.monthly_equivalent_cents, { currency })}/mo
                     </p>
                   </div>
                 </li>

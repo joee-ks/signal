@@ -58,10 +58,11 @@ export default async function DashboardPage(props: {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, onboarded_at")
+    .select("display_name, onboarded_at, currency")
     .eq("id", user.id)
     .maybeSingle();
   if (profile && !profile.onboarded_at) redirect("/onboarding");
+  const currency = (profile?.currency as string | null) ?? "USD";
 
   const [intel, accountsQ, txCountQ] = await Promise.all([
     fetchAndComputeIntelligence(supabase, user.id),
@@ -214,7 +215,7 @@ export default async function DashboardPage(props: {
                 label="Projected end-of-month balance"
                 value={
                   intel.forecast.end_of_month_balance_cents != null
-                    ? formatCents(intel.forecast.end_of_month_balance_cents)
+                    ? formatCents(intel.forecast.end_of_month_balance_cents, { currency })
                     : "—"
                 }
               />
@@ -232,7 +233,7 @@ export default async function DashboardPage(props: {
                   label="If income drops 20%"
                   value={
                     intel.forecast.shock_drop.deficit_cents > 0
-                      ? `Short ${formatCents(intel.forecast.shock_drop.deficit_cents)}/mo`
+                      ? `Short ${formatCents(intel.forecast.shock_drop.deficit_cents, { currency })}/mo`
                       : "Still covered"
                   }
                   help={
@@ -252,7 +253,7 @@ export default async function DashboardPage(props: {
               <CardHeader>
                 <CardDescription>Net across accounts</CardDescription>
                 <CardTitle className="text-2xl tabular-nums">
-                  {formatCents(netWorth)}
+                  {formatCents(netWorth, { currency })}
                 </CardTitle>
               </CardHeader>
             </Card>

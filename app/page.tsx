@@ -2,10 +2,18 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-export default function Home() {
+export default async function Home(props: {
+  searchParams: Promise<{ deleted?: string }>;
+}) {
+  const { deleted } = await props.searchParams;
   return (
     <div className="flex flex-1 flex-col">
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-16 sm:py-24">
+        {deleted === "1" && (
+          <div className="mx-auto mb-8 max-w-2xl rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-center text-sm text-emerald-700 dark:text-emerald-300">
+            Your account and all data were permanently deleted.
+          </div>
+        )}
         {/* Hero */}
         <section className="flex flex-col items-center gap-6 text-center">
           <span className="inline-block rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">

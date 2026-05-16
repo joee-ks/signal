@@ -1,22 +1,44 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { centsFromDollarString } from "@/lib/format";
+import { SUPPORTED_CURRENCIES } from "@/lib/profile";
 
-const schema = z.object({
+const CURRENCY_CODES = SUPPORTED_CURRENCIES.map((c) => c.code) as [
+  string,
+  ...string[],
+];
+
+const profileSchema = z.object({
   display_name: z.string().trim().max(80).optional().or(z.literal("")),
   monthly_income: z.string().trim().min(1),
+  currency: z.enum(CURRENCY_CODES as unknown as readonly [string, ...string[]]),
 });
 
-export async function updateProfile(formData: FormData) {
-  const parsed = schema.parse(Object.fromEntries(formData));
+const emailSchema = z.object({
+  new_email: z.string().trim().email(),
+});
+
+const deleteSchema = z.object({
+  confirm: z.literal("DELETE"),
+});
+
+async function requireUser() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  return { supabase, user };
+}
+
+export async function updateProfile(formData: FormData) {
+  const parsed = profileSchema.parse(Object.fromEntries(formData));
+  const { supabase, user } = await requireUser();
 
   const incomeCents = centsFromDollarString(parsed.monthly_income);
   if (incomeCents == null || incomeCents < 0) {
@@ -28,8 +50,63 @@ export async function updateProfile(formData: FormData) {
     .update({
       display_name: parsed.display_name || null,
       monthly_income_cents: incomeCents,
+      currency: parsed.currency,
     })
     .eq("id", user.id);
   if (error) throw error;
   redirect("/settings?saved=1");
+}
+
+export async function requestEmailChange(formData: FormData) {
+  const parsed = emailSchema.parse(Object.fromEntries(formData));
+  const { supabase, user } = await requireUser();
+
+  if (parsed.new_email.toLowerCase() === (user.email ?? "").toLowerCase()) {
+    redirect("/settings?info=email_unchanged");
+  }
+
+  // Build the absolute origin for the confirmation link. We respect
+  // x-forwarded-proto/host so this works behind Vercel's edge.
+  const hdrs = await headers();
+  const proto = hdrs.get("x-forwarded-proto") ?? "http";
+  const host = hdrs.get("host") ?? "localhost:3000";
+  const origin = `${proto}://${host}`;
+
+  const { error } = await supabase.auth.updateUser(
+    { email: parsed.new_email },
+    { emailRedirectTo: `${origin}/auth/confirm` },
+  );
+  if (error) {
+    redirect(
+      `/settings?info=email_change_failed&message=${encodeURIComponent(error.message)}`,
+    );
+  }
+  redirect("/settings?info=email_change_sent");
+}
+
+export async function deleteAccount(formData: FormData) {
+  // Throws if `confirm` isn't exactly "DELETE".
+  deleteSchema.parse(Object.fromEntries(formData));
+
+  const { supabase, user } = await requireUser();
+
+  // Delete the auth.users row via the service-role client. RLS + the
+  // `on delete cascade` constraints in our schema fan that out to
+  // profiles / accounts / transactions / category_rules /
+  // signals_snapshots automatically.
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(user.id);
+  if (error) throw error;
+
+  // Clear the local session cookies. The Supabase API call may fail with
+  // a 401 since the user no longer exists — that's expected, the
+  // important part is that @supabase/ssr clears the cookies.
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // ignore — the auth row is gone, cookies will be replaced by the
+    // proxy on the next request anyway.
+  }
+
+  redirect("/?deleted=1");
 }

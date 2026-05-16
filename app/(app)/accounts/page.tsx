@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCents } from "@/lib/format";
+import { getUserCurrency } from "@/lib/profile";
 
 const TYPE_LABEL: Record<string, string> = {
   checking: "Checking",
@@ -29,12 +30,15 @@ export default async function AccountsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data } = await supabase
-    .from("accounts")
-    .select("id, name, type, current_balance_cents, is_archived")
-    .eq("user_id", user.id)
-    .order("is_archived", { ascending: true })
-    .order("created_at", { ascending: true });
+  const [{ data }, currency] = await Promise.all([
+    supabase
+      .from("accounts")
+      .select("id, name, type, current_balance_cents, is_archived")
+      .eq("user_id", user.id)
+      .order("is_archived", { ascending: true })
+      .order("created_at", { ascending: true }),
+    getUserCurrency(supabase, user.id),
+  ]);
   const accounts: AccountRow[] = (data ?? []) as AccountRow[];
 
   const active = accounts.filter((a) => !a.is_archived);
@@ -52,7 +56,7 @@ export default async function AccountsPage() {
           <p className="text-sm text-muted-foreground">
             Net across active accounts:{" "}
             <span className="font-medium text-foreground tabular-nums">
-              {formatCents(netWorth)}
+              {formatCents(netWorth, { currency })}
             </span>
           </p>
         </div>
@@ -87,7 +91,7 @@ export default async function AccountsPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-semibold tracking-tight tabular-nums">
-                    {formatCents(a.current_balance_cents)}
+                    {formatCents(a.current_balance_cents, { currency })}
                   </p>
                 </CardContent>
               </Card>
@@ -115,7 +119,7 @@ export default async function AccountsPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-lg font-semibold tracking-tight tabular-nums">
-                      {formatCents(a.current_balance_cents)}
+                      {formatCents(a.current_balance_cents, { currency })}
                     </p>
                   </CardContent>
                 </Card>

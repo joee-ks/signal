@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCents, formatDate } from "@/lib/format";
 import { labelFor } from "@/lib/categories";
+import { getUserCurrency } from "@/lib/profile";
 
 type TxnRow = {
   id: string;
@@ -24,24 +25,28 @@ export default async function TransactionsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: accounts } = await supabase
-    .from("accounts")
-    .select("id, name")
-    .eq("user_id", user.id)
-    .eq("is_archived", false);
-  const hasAccounts = (accounts ?? []).length > 0;
+  const [accountsQ, txnsQ, currency] = await Promise.all([
+    supabase
+      .from("accounts")
+      .select("id, name")
+      .eq("user_id", user.id)
+      .eq("is_archived", false),
+    supabase
+      .from("transactions")
+      .select(
+        "id, occurred_on, amount_cents, description, category, account_id, is_recurring",
+      )
+      .eq("user_id", user.id)
+      .order("occurred_on", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(200),
+    getUserCurrency(supabase, user.id),
+  ]);
+  const hasAccounts = (accountsQ.data ?? []).length > 0;
   const accountNameMap = new Map(
-    (accounts ?? []).map((a) => [a.id as string, a.name as string]),
+    (accountsQ.data ?? []).map((a) => [a.id as string, a.name as string]),
   );
-
-  const { data } = await supabase
-    .from("transactions")
-    .select("id, occurred_on, amount_cents, description, category, account_id, is_recurring")
-    .eq("user_id", user.id)
-    .order("occurred_on", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(200);
-  const txns: TxnRow[] = (data ?? []) as TxnRow[];
+  const txns: TxnRow[] = (txnsQ.data ?? []) as TxnRow[];
 
   return (
     <div className="space-y-6">
@@ -129,7 +134,7 @@ export default async function TransactionsPage() {
                           : "text-foreground"
                       }`}
                     >
-                      {formatCents(t.amount_cents, { sign: "always" })}
+                      {formatCents(t.amount_cents, { sign: "always", currency })}
                     </div>
                   </Link>
                 </li>
