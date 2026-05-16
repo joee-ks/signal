@@ -9,6 +9,7 @@ const NAV = [
   { href: "/signals", label: "Signals" },
   { href: "/transactions", label: "Transactions" },
   { href: "/accounts", label: "Accounts" },
+  { href: "/settings", label: "Settings" },
 ] as const;
 
 export default async function AppLayout({
