@@ -423,9 +423,172 @@ function generateSaver(opts: { seed?: number } = {}): SampleTransaction[] {
   return out.sort((a, b) => a.occurred_on.localeCompare(b.occurred_on));
 }
 
+// ----------------------------------------------------------------------------
+// "Subscription stacker" — solid income but three new subscriptions added
+// in the last 35 days on top of an already-loaded streaming stack. Designed
+// to trigger multiple subscription_creep signals at info + watch severities.
+// ----------------------------------------------------------------------------
+
+function generateStacker(opts: { seed?: number } = {}): SampleTransaction[] {
+  const rng = makeRng(opts.seed ?? 46);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = periodStart(today);
+  const out: SampleTransaction[] = [];
+
+  pushBiweekly(out, rng, start, today, {
+    amount_cents: 225000,
+    jitter_pct: 0.02,
+    description: "DIRECT DEPOSIT PAYROLL",
+    merchant: "Payroll",
+    category: "income",
+    bucket: "income",
+  });
+
+  pushMonthly(out, rng, start, today, 3, {
+    day: 1,
+    amount_cents: -140000,
+    description: "RENT PAYMENT",
+    merchant: "Landlord",
+    category: "housing",
+    bucket: "essential",
+  });
+
+  pushMonthly(out, rng, start, today, 3, { day: 5,  amount_cents: -8000,  jitter_pct: 0.05, description: "PG&E ELECTRIC",     merchant: "PG&E",     category: "utilities", bucket: "essential" });
+  pushMonthly(out, rng, start, today, 3, { day: 9,  amount_cents: -6500,  jitter_pct: 0.05, description: "COMCAST INTERNET",  merchant: "Comcast",  category: "internet",  bucket: "essential" });
+  pushMonthly(out, rng, start, today, 3, { day: 13, amount_cents: -5000,  jitter_pct: 0.05, description: "T-MOBILE WIRELESS", merchant: "T-Mobile", category: "phone",     bucket: "essential" });
+  pushMonthly(out, rng, start, today, 3, { day: 17, amount_cents: -13000, jitter_pct: 0.05, description: "GEICO INSURANCE",   merchant: "Geico",    category: "insurance", bucket: "essential" });
+
+  // Long-standing subscription stack (across all months).
+  const longSubs = [
+    { day: 2,  amt: -1599, desc: "NETFLIX.COM",      m: "Netflix",        c: "subscriptions" },
+    { day: 4,  amt: -1099, desc: "SPOTIFY USA",      m: "Spotify",        c: "subscriptions" },
+    { day: 8,  amt: -999,  desc: "APPLE.COM/BILL",   m: "Apple",          c: "subscriptions" },
+    { day: 11, amt: -1499, desc: "DISNEY PLUS",      m: "Disney+",        c: "subscriptions" },
+    { day: 14, amt: -1599, desc: "YOUTUBE PREMIUM",  m: "YouTube",        c: "subscriptions" },
+    { day: 16, amt: -1499, desc: "AUDIBLE",          m: "Audible",        c: "subscriptions" },
+    { day: 18, amt: -1799, desc: "NYT SUBSCRIPTION", m: "NYT",            c: "subscriptions" },
+    { day: 20, amt: -1099, desc: "ICLOUD STORAGE",   m: "iCloud",         c: "subscriptions" },
+    { day: 22, amt: -899,  desc: "NOTION",           m: "Notion",         c: "subscriptions" },
+    { day: 24, amt: -2499, desc: "PLANET FITNESS",   m: "Planet Fitness", c: "fitness" },
+  ];
+  for (const s of longSubs) {
+    pushMonthly(out, rng, start, today, 3, {
+      day: s.day,
+      amount_cents: s.amt,
+      description: s.desc,
+      merchant: s.m,
+      category: s.c,
+      bucket: "discretionary",
+    });
+  }
+
+  // Recently added subscriptions (within last ~35 days) — these are the
+  // subscription_creep targets. Each needs 2+ occurrences to be detected
+  // as recurring, so we schedule one ~30 days ago and one ~today.
+  const newSubs = [
+    { firstSeenDaysAgo: 30, amt: -1599, desc: "HBO MAX",              m: "HBO Max",  c: "subscriptions" }, // info (<$20)
+    { firstSeenDaysAgo: 32, amt: -2000, desc: "OPENAI*CHATGPT PLUS",  m: "OpenAI",   c: "subscriptions" }, // info (=$20, boundary)
+    { firstSeenDaysAgo: 28, amt: -5499, desc: "ADOBE CREATIVE CLOUD", m: "Adobe",    c: "subscriptions" }, // watch (>$20)
+  ];
+  for (const s of newSubs) {
+    const firstDate = subDays(today, s.firstSeenDaysAgo);
+    for (let d = new Date(firstDate); d <= today; d = addDays(d, 30)) {
+      out.push({
+        occurred_on: format(d, "yyyy-MM-dd"),
+        amount_cents: s.amt,
+        description: s.desc,
+        merchant: s.m,
+        category: s.c,
+        bucket: "discretionary",
+        is_recurring: true,
+      });
+    }
+  }
+
+  // Modest variable spending.
+  pushNoise(out, rng, start, today, { count: 22, merchants: GROCERY,   range_cents: [3500, 11000], category: "groceries", bucket: "essential" });
+  pushNoise(out, rng, start, today, { count: 16, merchants: DINING,    range_cents: [1500, 4000],  category: "dining",    bucket: "discretionary" });
+  pushNoise(out, rng, start, today, { count: 22, merchants: COFFEE,    range_cents: [400, 800],    category: "coffee",    bucket: "discretionary" });
+  pushNoise(out, rng, start, today, { count: 8,  merchants: SHOPPING,  range_cents: [1500, 8000],  category: "shopping",  bucket: "discretionary" });
+  pushNoise(out, rng, start, today, { count: 14, merchants: TRANSPORT, range_cents: [800, 4000],   category: "transport", bucket: "essential" });
+
+  return out.sort((a, b) => a.occurred_on.localeCompare(b.occurred_on));
+}
+
+// ----------------------------------------------------------------------------
+// "Lifestyle splurge" — solid income but discretionary spending sharply
+// elevated in the last 30 days across dining, coffee, and shopping. Designed
+// to trigger lifestyle_inflation signals at high severity in multiple
+// categories (and likely a few anomaly signals too).
+// ----------------------------------------------------------------------------
+
+function generateSplurge(opts: { seed?: number } = {}): SampleTransaction[] {
+  const rng = makeRng(opts.seed ?? 47);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = periodStart(today);
+  const out: SampleTransaction[] = [];
+
+  pushBiweekly(out, rng, start, today, {
+    amount_cents: 275000,
+    jitter_pct: 0.02,
+    description: "DIRECT DEPOSIT PAYROLL",
+    merchant: "Payroll",
+    category: "income",
+    bucket: "income",
+  });
+
+  pushMonthly(out, rng, start, today, 3, {
+    day: 1,
+    amount_cents: -150000,
+    description: "RENT PAYMENT",
+    merchant: "Landlord",
+    category: "housing",
+    bucket: "essential",
+  });
+
+  pushMonthly(out, rng, start, today, 3, { day: 5,  amount_cents: -10000, jitter_pct: 0.05, description: "PG&E ELECTRIC",    merchant: "PG&E",    category: "utilities", bucket: "essential" });
+  pushMonthly(out, rng, start, today, 3, { day: 10, amount_cents: -8000,  jitter_pct: 0.05, description: "COMCAST INTERNET", merchant: "Comcast", category: "internet",  bucket: "essential" });
+  pushMonthly(out, rng, start, today, 3, { day: 14, amount_cents: -6500,  jitter_pct: 0.05, description: "VERIZON",          merchant: "Verizon", category: "phone",     bucket: "essential" });
+  pushMonthly(out, rng, start, today, 3, { day: 17, amount_cents: -15000, jitter_pct: 0.05, description: "GEICO INSURANCE",  merchant: "Geico",   category: "insurance", bucket: "essential" });
+
+  pushMonthly(out, rng, start, today, 3, { day: 3,  amount_cents: -1599, description: "NETFLIX.COM", merchant: "Netflix", category: "subscriptions", bucket: "discretionary" });
+  pushMonthly(out, rng, start, today, 3, { day: 14, amount_cents: -1099, description: "SPOTIFY USA", merchant: "Spotify", category: "subscriptions", bucket: "discretionary" });
+
+  // Steady essentials.
+  pushNoise(out, rng, start, today, { count: 24, merchants: GROCERY,   range_cents: [4000, 11000], category: "groceries", bucket: "essential" });
+  pushNoise(out, rng, start, today, { count: 14, merchants: TRANSPORT, range_cents: [800, 3500],   category: "transport", bucket: "essential" });
+
+  // Discretionary: a modest baseline over the older 75 days, then a sharp
+  // spike concentrated in the last 30 days. Lifestyle inflation should
+  // trigger high severity in all three categories.
+  const spikeStart = subDays(today, 30);
+
+  // Dining: prior baseline ~$80/mo, recent ~$720/mo.
+  pushNoise(out, rng, start, spikeStart, { count: 8,  merchants: DINING, range_cents: [1500, 3500], category: "dining", bucket: "discretionary" });
+  pushNoise(out, rng, spikeStart, today, { count: 16, merchants: DINING, range_cents: [2500, 6500], category: "dining", bucket: "discretionary" });
+
+  // Coffee: prior baseline ~$24/mo, recent ~$120/mo.
+  pushNoise(out, rng, start, spikeStart, { count: 10, merchants: COFFEE, range_cents: [400, 800], category: "coffee", bucket: "discretionary" });
+  pushNoise(out, rng, spikeStart, today, { count: 18, merchants: COFFEE, range_cents: [500, 900], category: "coffee", bucket: "discretionary" });
+
+  // Shopping: prior baseline ~$80/mo, recent ~$800/mo.
+  pushNoise(out, rng, start, spikeStart, { count: 4, merchants: SHOPPING, range_cents: [2000, 8000],  category: "shopping", bucket: "discretionary" });
+  pushNoise(out, rng, spikeStart, today, { count: 8, merchants: SHOPPING, range_cents: [3000, 18000], category: "shopping", bucket: "discretionary" });
+
+  return out.sort((a, b) => a.occurred_on.localeCompare(b.occurred_on));
+}
+
 // --- Persona registry -------------------------------------------------------
 
-export type PersonaId = "balanced" | "tight" | "variable" | "saver";
+export type PersonaId =
+  | "balanced"
+  | "tight"
+  | "variable"
+  | "saver"
+  | "stacker"
+  | "splurge";
 
 export type Persona = {
   id: PersonaId;
@@ -472,6 +635,24 @@ export const PERSONAS: readonly Persona[] = [
     monthly_income_cents: 750000,
     starting_balance_cents: 1800000,
     generate: generateSaver,
+  },
+  {
+    id: "stacker",
+    label: "Subscription stacker",
+    description:
+      "Healthy income, already-loaded streaming stack, plus three new subscriptions added in the last 35 days — showcases multiple subscription_creep signals.",
+    monthly_income_cents: 450000,
+    starting_balance_cents: 200000,
+    generate: generateStacker,
+  },
+  {
+    id: "splurge",
+    label: "Lifestyle splurge",
+    description:
+      "Healthy income with discretionary spending sharply elevated in the last 30 days across dining, coffee, and shopping — showcases lifestyle_inflation signals at high severity.",
+    monthly_income_cents: 550000,
+    starting_balance_cents: 400000,
+    generate: generateSplurge,
   },
 ] as const;
 
