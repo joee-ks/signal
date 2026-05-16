@@ -3,6 +3,22 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { generateSampleTransactions } from "@/lib/sample-data";
+import {
+  fetchAndComputeIntelligence,
+  getOrGenerateNarrative,
+} from "@/lib/intelligence/snapshot";
+
+export async function recomputeNarrative() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const intel = await fetchAndComputeIntelligence(supabase, user.id);
+  await getOrGenerateNarrative(supabase, user.id, intel, { force: true });
+  redirect("/dashboard?info=recomputed");
+}
 
 /**
  * Seeds a "Sample Checking" account and ~3 months of realistic transactions

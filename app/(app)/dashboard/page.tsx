@@ -1,6 +1,11 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import {
+  fetchAndComputeIntelligence,
+  getOrGenerateNarrative,
+} from "@/lib/intelligence/snapshot";
 import { loadSampleData } from "./_actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,12 +17,15 @@ import {
 } from "@/components/ui/card";
 import { HealthGauge } from "@/components/health-gauge";
 import { PatternCard } from "@/components/pattern-card";
+import {
+  NarrativeCard,
+  NarrativeErrorCard,
+  NarrativeSkeleton,
+} from "@/components/narrative-card";
 import { formatCents } from "@/lib/format";
 import { labelFor } from "@/lib/categories";
-import { computeIntelligence } from "@/lib/intelligence";
 import type {
-  Account,
-  Transaction,
+  IntelligenceResult,
   SubScoreKey,
 } from "@/lib/intelligence/types";
 
@@ -41,50 +49,35 @@ export default async function DashboardPage(props: {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, onboarded_at, monthly_income_cents, currency")
+    .select("display_name, onboarded_at")
     .eq("id", user.id)
     .maybeSingle();
   if (profile && !profile.onboarded_at) redirect("/onboarding");
 
-  const { data: accountRows } = await supabase
-    .from("accounts")
-    .select("id, name, type, current_balance_cents, is_archived")
-    .eq("user_id", user.id);
-  const accounts: Account[] = (accountRows ?? []) as Account[];
+  const [intel, accountsQ, txCountQ] = await Promise.all([
+    fetchAndComputeIntelligence(supabase, user.id),
+    supabase
+      .from("accounts")
+      .select("id, current_balance_cents, is_archived")
+      .eq("user_id", user.id),
+    supabase
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id),
+  ]);
 
-  const { data: txRows } = await supabase
-    .from("transactions")
-    .select(
-      "id, account_id, occurred_on, amount_cents, description, category, bucket",
-    )
-    .eq("user_id", user.id);
-  const transactions: Transaction[] = (txRows ?? []).map((t) => ({
-    id: t.id as string,
-    account_id: t.account_id as string,
-    occurred_on: t.occurred_on as string,
-    amount_cents: (t.amount_cents as number) ?? 0,
-    description: (t.description as string) ?? "",
-    category: (t.category as string) ?? "uncategorized",
-    bucket: (t.bucket as string) ?? "discretionary",
-  }));
-
-  const activeAccounts = accounts.filter((a) => !a.is_archived);
+  const accountRows = (accountsQ.data ?? []) as Array<{
+    is_archived: boolean;
+    current_balance_cents: number | null;
+  }>;
+  const activeAccounts = accountRows.filter((a) => !a.is_archived);
   const netWorth = activeAccounts.reduce(
     (s, a) => s + (a.current_balance_cents ?? 0),
     0,
   );
+  const txCount = txCountQ.count ?? 0;
+  const hasTransactions = txCount > 0;
 
-  const intel = computeIntelligence({
-    profile: {
-      monthly_income_cents: profile?.monthly_income_cents ?? null,
-      currency: profile?.currency ?? "USD",
-    },
-    accounts,
-    transactions,
-    today: new Date(),
-  });
-
-  const hasTransactions = transactions.length > 0;
   const topPatterns = intel.patterns.slice(0, 3);
   const remainingPatterns = intel.patterns.length - topPatterns.length;
 
@@ -101,12 +94,17 @@ export default async function DashboardPage(props: {
 
       {info === "sample_loaded" && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
-          Sample data loaded — the dashboard below is computed from it.
+          Sample data loaded — the dashboard is computed from it.
         </div>
       )}
       {info === "sample_skipped" && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
           You already have transactions — sample data was skipped.
+        </div>
+      )}
+      {info === "recomputed" && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+          Signals recomputed.
         </div>
       )}
 
@@ -122,9 +120,7 @@ export default async function DashboardPage(props: {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               <Button
-                render={
-                  <Link href="/transactions/new">Add a transaction</Link>
-                }
+                render={<Link href="/transactions/new">Add a transaction</Link>}
               />
               <form action={loadSampleData}>
                 <Button type="submit" variant="outline">
@@ -136,6 +132,11 @@ export default async function DashboardPage(props: {
         </Card>
       ) : (
         <>
+          {/* Narrative — streams in via Suspense */}
+          <Suspense fallback={<NarrativeSkeleton />}>
+            <NarrativeBlock userId={user.id} intel={intel} />
+          </Suspense>
+
           {/* Hero: Health score + sub-scores */}
           <Card>
             <CardContent className="py-6">
@@ -147,19 +148,19 @@ export default async function DashboardPage(props: {
                   </p>
                 </div>
                 <div className="flex-1 space-y-3">
-                  {(Object.keys(intel.health.sub_scores) as SubScoreKey[]).map(
-                    (key) => {
-                      const sub = intel.health.sub_scores[key];
-                      return (
-                        <SubScoreBar
-                          key={key}
-                          label={SUB_SCORE_LABEL[key]}
-                          score={sub.score}
-                          reason={sub.reason}
-                        />
-                      );
-                    },
-                  )}
+                  {(
+                    Object.keys(intel.health.sub_scores) as SubScoreKey[]
+                  ).map((key) => {
+                    const sub = intel.health.sub_scores[key];
+                    return (
+                      <SubScoreBar
+                        key={key}
+                        label={SUB_SCORE_LABEL[key]}
+                        score={sub.score}
+                        reason={sub.reason}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             </CardContent>
@@ -261,7 +262,7 @@ export default async function DashboardPage(props: {
               <CardHeader>
                 <CardDescription>Transactions</CardDescription>
                 <CardTitle className="text-2xl tabular-nums">
-                  {transactions.length}
+                  {txCount}
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -270,6 +271,34 @@ export default async function DashboardPage(props: {
       )}
     </div>
   );
+}
+
+/**
+ * Async server component — runs inside the Suspense boundary so the rest of
+ * the dashboard streams immediately while we wait on Claude (which can take
+ * a few seconds on a cache miss).
+ */
+async function NarrativeBlock({
+  userId,
+  intel,
+}: {
+  userId: string;
+  intel: IntelligenceResult;
+}) {
+  const supabase = await createClient();
+  try {
+    const result = await getOrGenerateNarrative(supabase, userId, intel);
+    return (
+      <NarrativeCard
+        narrative={result.narrative}
+        generatedAt={result.generated_at}
+        fromCache={result.from_cache}
+      />
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "unknown error";
+    return <NarrativeErrorCard message={message} />;
+  }
 }
 
 function SubScoreBar({
@@ -326,9 +355,7 @@ function ForecastRow({
     <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{label}</p>
-        {help && (
-          <p className="text-xs text-muted-foreground">{help}</p>
-        )}
+        {help && <p className="text-xs text-muted-foreground">{help}</p>}
       </div>
       <p className="shrink-0 text-base font-semibold tabular-nums">{value}</p>
     </div>

@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import {
+  fetchAndComputeIntelligence,
+  getOrGenerateNarrative,
+} from "@/lib/intelligence/snapshot";
 import {
   Card,
   CardContent,
@@ -9,10 +14,14 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PatternCard } from "@/components/pattern-card";
+import {
+  NarrativeCard,
+  NarrativeErrorCard,
+  NarrativeSkeleton,
+} from "@/components/narrative-card";
 import { formatCents } from "@/lib/format";
 import { labelFor } from "@/lib/categories";
-import { computeIntelligence } from "@/lib/intelligence";
-import type { Account, Transaction } from "@/lib/intelligence/types";
+import type { IntelligenceResult } from "@/lib/intelligence/types";
 
 const CADENCE_LABEL: Record<string, string> = {
   weekly: "every week",
@@ -28,43 +37,7 @@ export default async function SignalsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("monthly_income_cents, currency")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const { data: accountRows } = await supabase
-    .from("accounts")
-    .select("id, name, type, current_balance_cents, is_archived")
-    .eq("user_id", user.id);
-  const accounts: Account[] = (accountRows ?? []) as Account[];
-
-  const { data: txRows } = await supabase
-    .from("transactions")
-    .select(
-      "id, account_id, occurred_on, amount_cents, description, category, bucket",
-    )
-    .eq("user_id", user.id);
-  const transactions: Transaction[] = (txRows ?? []).map((t) => ({
-    id: t.id as string,
-    account_id: t.account_id as string,
-    occurred_on: t.occurred_on as string,
-    amount_cents: (t.amount_cents as number) ?? 0,
-    description: (t.description as string) ?? "",
-    category: (t.category as string) ?? "uncategorized",
-    bucket: (t.bucket as string) ?? "discretionary",
-  }));
-
-  const intel = computeIntelligence({
-    profile: {
-      monthly_income_cents: profile?.monthly_income_cents ?? null,
-      currency: profile?.currency ?? "USD",
-    },
-    accounts,
-    transactions,
-    today: new Date(),
-  });
+  const intel = await fetchAndComputeIntelligence(supabase, user.id);
 
   const recurringOut = intel.recurring.filter((r) => r.direction === "out");
   const recurringIn = intel.recurring.filter((r) => r.direction === "in");
@@ -75,9 +48,13 @@ export default async function SignalsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Signals</h1>
         <p className="text-sm text-muted-foreground">
           Patterns the engine has detected in your activity, plus the recurring
-          charges it's tracking.
+          charges it&apos;s tracking.
         </p>
       </div>
+
+      <Suspense fallback={<NarrativeSkeleton />}>
+        <NarrativeBlock userId={user.id} intel={intel} />
+      </Suspense>
 
       {/* All patterns */}
       <div className="space-y-2">
@@ -200,20 +177,42 @@ export default async function SignalsPage() {
           <CardTitle className="text-base">The engine, briefly</CardTitle>
           <CardDescription className="space-y-2 text-sm">
             <span className="block">
-              Everything on this page is computed by deterministic TypeScript
-              over your transactions — no AI, no third-party data. The
-              Financial Health Score is a weighted average of five sub-scores:
-              buffer/runway, cash-flow stability, commitment load,
-              discretionary discipline, and shock resilience.
+              The numbers and patterns above are computed by deterministic
+              TypeScript — no AI, no third-party data. The narrative at the top
+              is the only place Claude is involved; it&apos;s a plain-English
+              read of the same structured signals.
             </span>
             <span className="block">
-              In a future phase, Claude will turn this structured output into
-              plain-language narrative — for now, the numbers and patterns
-              speak for themselves.
+              The Financial Health Score is a weighted average of five
+              sub-scores: buffer/runway, cash-flow stability, commitment load,
+              discretionary discipline, and shock resilience.
             </span>
           </CardDescription>
         </CardHeader>
       </Card>
     </div>
   );
+}
+
+async function NarrativeBlock({
+  userId,
+  intel,
+}: {
+  userId: string;
+  intel: IntelligenceResult;
+}) {
+  const supabase = await createClient();
+  try {
+    const result = await getOrGenerateNarrative(supabase, userId, intel);
+    return (
+      <NarrativeCard
+        narrative={result.narrative}
+        generatedAt={result.generated_at}
+        fromCache={result.from_cache}
+      />
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "unknown error";
+    return <NarrativeErrorCard message={message} />;
+  }
 }
