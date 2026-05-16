@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { SubmitButton } from "@/components/submit-button";
 import { HealthGauge } from "@/components/health-gauge";
 import { PatternCard } from "@/components/pattern-card";
 import {
@@ -24,6 +25,7 @@ import {
 } from "@/components/narrative-card";
 import { formatCents } from "@/lib/format";
 import { labelFor } from "@/lib/categories";
+import { PERSONAS } from "@/lib/sample-data";
 import type {
   IntelligenceResult,
   SubScoreKey,
@@ -35,6 +37,13 @@ const SUB_SCORE_LABEL: Record<SubScoreKey, string> = {
   commitment: "Commitment load",
   discretionary: "Discretionary discipline",
   shock: "Shock resilience",
+};
+
+type AccountRow = {
+  id: string;
+  name: string;
+  current_balance_cents: number | null;
+  is_archived: boolean;
 };
 
 export default async function DashboardPage(props: {
@@ -58,7 +67,7 @@ export default async function DashboardPage(props: {
     fetchAndComputeIntelligence(supabase, user.id),
     supabase
       .from("accounts")
-      .select("id, current_balance_cents, is_archived")
+      .select("id, name, current_balance_cents, is_archived")
       .eq("user_id", user.id),
     supabase
       .from("transactions")
@@ -66,17 +75,34 @@ export default async function DashboardPage(props: {
       .eq("user_id", user.id),
   ]);
 
-  const accountRows = (accountsQ.data ?? []) as Array<{
-    is_archived: boolean;
-    current_balance_cents: number | null;
-  }>;
-  const activeAccounts = accountRows.filter((a) => !a.is_archived);
+  const accounts = (accountsQ.data ?? []) as AccountRow[];
+  const activeAccounts = accounts.filter((a) => !a.is_archived);
   const netWorth = activeAccounts.reduce(
     (s, a) => s + (a.current_balance_cents ?? 0),
     0,
   );
   const txCount = txCountQ.count ?? 0;
   const hasTransactions = txCount > 0;
+
+  // Sample-data detection: any account whose name starts with "Sample" is
+  // considered sample. The switcher card is shown when the user has txns but
+  // none of them live outside sample accounts.
+  const sampleAccountIds = accounts
+    .filter((a) => a.name.startsWith("Sample"))
+    .map((a) => a.id);
+  let realTxQ = supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+  if (sampleAccountIds.length > 0) {
+    realTxQ = realTxQ.not(
+      "account_id",
+      "in",
+      `(${sampleAccountIds.join(",")})`,
+    );
+  }
+  const { count: realTxCount } = await realTxQ;
+  const showPersonaSwitcher = hasTransactions && (realTxCount ?? 0) === 0;
 
   const topPatterns = intel.patterns.slice(0, 3);
   const remainingPatterns = intel.patterns.length - topPatterns.length;
@@ -99,7 +125,8 @@ export default async function DashboardPage(props: {
       )}
       {info === "sample_skipped" && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-          You already have transactions — sample data was skipped.
+          You have real transactions — sample data was skipped to avoid mixing
+          it with your own.
         </div>
       )}
       {info === "recomputed" && (
@@ -109,30 +136,9 @@ export default async function DashboardPage(props: {
       )}
 
       {!hasTransactions ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Nothing to signal on yet</CardTitle>
-            <CardDescription>
-              Add a few transactions or load sample data to see your Financial
-              Health Score, signals, and forecast.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                render={<Link href="/transactions/new">Add a transaction</Link>}
-              />
-              <form action={loadSampleData}>
-                <Button type="submit" variant="outline">
-                  Load sample data
-                </Button>
-              </form>
-            </div>
-          </CardContent>
-        </Card>
+        <PersonaPicker variant="empty" />
       ) : (
         <>
-          {/* Narrative — streams in via Suspense */}
           <Suspense fallback={<NarrativeSkeleton />}>
             <NarrativeBlock userId={user.id} intel={intel} />
           </Suspense>
@@ -267,6 +273,8 @@ export default async function DashboardPage(props: {
               </CardHeader>
             </Card>
           </div>
+
+          {showPersonaSwitcher && <PersonaPicker variant="switcher" />}
         </>
       )}
     </div>
@@ -274,10 +282,88 @@ export default async function DashboardPage(props: {
 }
 
 /**
- * Async server component — runs inside the Suspense boundary so the rest of
- * the dashboard streams immediately while we wait on Claude (which can take
- * a few seconds on a cache miss).
+ * Persona picker — used in two layouts:
+ *   - "empty": prominent card shown when the user has no transactions.
+ *   - "switcher": compact card shown when they have only sample data,
+ *     letting them swap personas one-click.
  */
+function PersonaPicker({ variant }: { variant: "empty" | "switcher" }) {
+  if (variant === "empty") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Try Signal with sample data</CardTitle>
+          <CardDescription>
+            Pick a persona to seed ~3 months of realistic transactions and an
+            income to match. Or{" "}
+            <Link
+              href="/transactions/new"
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              add your own transaction
+            </Link>
+            .
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {PERSONAS.map((p) => (
+              <form key={p.id} action={loadSampleData}>
+                <input type="hidden" name="persona" value={p.id} />
+                <SubmitButton
+                  variant="outline"
+                  className="w-full"
+                  pendingLabel="Loading…"
+                >
+                  {p.label}
+                </SubmitButton>
+              </form>
+            ))}
+          </div>
+          <ul className="space-y-1.5 text-xs text-muted-foreground">
+            {PERSONAS.map((p) => (
+              <li key={p.id}>
+                <strong className="text-foreground">{p.label}:</strong>{" "}
+                {p.description}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Switcher variant — bottom of the dashboard for sample-data-only users.
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Swap sample persona</CardTitle>
+        <CardDescription>
+          You&apos;re viewing sample data. Switch to a different persona to see
+          how the engine and narrative respond — this wipes the previous sample
+          data. Adding your own transaction will hide this section.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-2">
+          {PERSONAS.map((p) => (
+            <form key={p.id} action={loadSampleData}>
+              <input type="hidden" name="persona" value={p.id} />
+              <SubmitButton
+                variant="outline"
+                size="sm"
+                pendingLabel="Loading…"
+              >
+                {p.label}
+              </SubmitButton>
+            </form>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 async function NarrativeBlock({
   userId,
   intel,

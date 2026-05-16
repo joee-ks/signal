@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { generateSampleTransactions } from "@/lib/sample-data";
+import { getPersona } from "@/lib/sample-data";
 import {
   fetchAndComputeIntelligence,
   getOrGenerateNarrative,
@@ -21,42 +21,94 @@ export async function recomputeNarrative() {
 }
 
 /**
- * Seeds a "Sample Checking" account and ~3 months of realistic transactions
- * for the current user. Idempotent-ish: only runs if the user has zero
- * non-archived accounts.
+ * Load (or swap to) a sample persona. Wipes any existing sample data first so
+ * personas can be swapped one-click. Refuses if the user has any real
+ * (non-sample) transactions, to avoid mixing test and real data.
+ *
+ * "Sample" accounts are identified by name prefix "Sample".
  */
-export async function loadSampleData() {
+export async function loadSampleData(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Refuse if the user already has any transactions — we don't want sample
-  // data co-mingling with real history. (Pre-onboarding empty account is fine.)
-  const { count: txCount } = await supabase
+  const rawPersona = formData.get("persona");
+  const persona = getPersona(typeof rawPersona === "string" ? rawPersona : null);
+
+  // 1. Identify the user's existing Sample-prefixed accounts.
+  const { data: sampleAccts } = await supabase
+    .from("accounts")
+    .select("id")
+    .eq("user_id", user.id)
+    .ilike("name", "Sample%");
+  const sampleAccountIds = (sampleAccts ?? []).map(
+    (a) => a.id as string,
+  );
+
+  // 2. Refuse if any transactions exist OUTSIDE those sample accounts —
+  //    don't mix sample with real data.
+  let realTxnQ = supabase
     .from("transactions")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id);
-  if ((txCount ?? 0) > 0) {
+  if (sampleAccountIds.length > 0) {
+    realTxnQ = realTxnQ.not(
+      "account_id",
+      "in",
+      `(${sampleAccountIds.join(",")})`,
+    );
+  }
+  const { count: realTxnCount } = await realTxnQ;
+  if ((realTxnCount ?? 0) > 0) {
     redirect("/dashboard?info=sample_skipped");
   }
 
-  // 1. Create the sample account.
+  // 3. Wipe existing sample data (txns first due to FK, then accounts).
+  if (sampleAccountIds.length > 0) {
+    await supabase
+      .from("transactions")
+      .delete()
+      .in("account_id", sampleAccountIds);
+    await supabase.from("accounts").delete().in("id", sampleAccountIds);
+  }
+
+  // 4. Invalidate any cached narrative — the shape will change anyway.
+  await supabase
+    .from("signals_snapshots")
+    .delete()
+    .eq("user_id", user.id);
+
+  // 5. Create the new sample account.
   const { data: account, error: accountErr } = await supabase
     .from("accounts")
     .insert({
       user_id: user.id,
-      name: "Sample Checking",
+      name: `Sample Checking (${persona.label})`,
       type: "checking",
-      current_balance_cents: 320000, // $3,200 starting balance
+      current_balance_cents: persona.starting_balance_cents,
     })
-    .select()
+    .select("id")
     .single();
   if (accountErr) throw accountErr;
 
-  // 2. Generate and batch-insert transactions.
-  const txns = generateSampleTransactions();
+  // 6. Stamp the persona's income on the profile (and mark onboarded if not).
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("onboarded_at")
+    .eq("id", user.id)
+    .single();
+  await supabase
+    .from("profiles")
+    .update({
+      monthly_income_cents: persona.monthly_income_cents,
+      onboarded_at: profile?.onboarded_at ?? new Date().toISOString(),
+    })
+    .eq("id", user.id);
+
+  // 7. Generate and batch-insert transactions (tagged source='sample').
+  const txns = persona.generate();
   const rows = txns.map((t) => ({
     user_id: user.id,
     account_id: account.id,
@@ -67,32 +119,14 @@ export async function loadSampleData() {
     category: t.category,
     bucket: t.bucket,
     is_recurring: t.is_recurring,
-    source: "manual" as const,
+    source: "sample" as const,
   }));
-
-  // Supabase has a row limit per insert; chunk to be safe.
   for (let i = 0; i < rows.length; i += 200) {
-    const chunk = rows.slice(i, i + 200);
-    const { error } = await supabase.from("transactions").insert(chunk);
+    const { error } = await supabase
+      .from("transactions")
+      .insert(rows.slice(i, i + 200));
     if (error) throw error;
   }
 
-  // If the user hasn't set income yet, give them a reasonable default so the
-  // intelligence engine has something to work with later.
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("monthly_income_cents, onboarded_at")
-    .eq("id", user.id)
-    .single();
-  if (profile && profile.monthly_income_cents == null) {
-    await supabase
-      .from("profiles")
-      .update({
-        monthly_income_cents: 480000, // ~$4,800/mo, matches the sample paycheck cadence
-        onboarded_at: profile.onboarded_at ?? new Date().toISOString(),
-      })
-      .eq("id", user.id);
-  }
-
-  redirect("/dashboard?info=sample_loaded");
+  redirect(`/dashboard?info=sample_loaded&persona=${persona.id}`);
 }
