@@ -188,23 +188,24 @@ function detectIncomeIrregularity(ctx: IntelligenceContext): Pattern[] {
 // ----------------------------------------------------------------------------
 // 5. Personal-baseline anomaly — this month's category is >2σ above its 6-mo norm
 //
-// The current month is usually partial, so we pro-rate it (current ×
-// days_in_month / day_of_month) and compare the *projected* full-month
-// number against the prior full-month baseline. Skipped in the first week
-// of the month because tiny samples extrapolated to a full month produce
-// noisy false positives.
+// Projecting the current month to a full-month equivalent is non-trivial
+// because categories have very different temporal shapes — rent is paid on
+// day 1, groceries are spread across the month, etc. A flat
+// "days_in_month / day_of_month" multiplier wildly overstates lump-sum
+// categories (rent at day 16 already represents 100% of monthly rent).
+//
+// Instead, we LEARN the typical shape per category from prior months:
+// `avg_completion_fraction(day_of_month)` = what % of monthly spending
+// usually happens by today's day. We project by dividing current by that
+// fraction (capped to avoid extrapolating from tiny samples).
+//
+// Skipped in days 1–6 because the prior-completion fractions are noisy
+// when sample windows are tiny.
 // ----------------------------------------------------------------------------
 function detectAnomalies(ctx: IntelligenceContext): Pattern[] {
   const today = ctx.today;
   const dayOfMonth = today.getDate();
   if (dayOfMonth < 7) return [];
-
-  const daysInMonth = new Date(
-    today.getFullYear(),
-    today.getMonth() + 1,
-    0,
-  ).getDate();
-  const projectionFactor = daysInMonth / dayOfMonth;
 
   const monthly = getMonthlyBuckets(ctx.transactions);
   const months = Array.from(monthly.keys()).sort();
@@ -212,15 +213,33 @@ function detectAnomalies(ctx: IntelligenceContext): Pattern[] {
 
   const currentKey = monthKey(today);
 
-  // Per-category totals per month.
+  // Per-month, per-category totals (used for the baseline mean/stdev).
   const catByMonth = new Map<string, Map<string, number>>();
+  // Per-prior-month, per-category transaction details (used to learn the
+  // typical day-of-month shape per category).
+  const catPriorDetails = new Map<
+    string,
+    Map<string, Array<{ day: number; cents: number }>>
+  >();
+
   for (const t of ctx.transactions) {
     if (t.amount_cents >= 0) continue;
     if (t.bucket === "transfer") continue;
     const m = monthKey(t.occurred_on);
+    const cents = Math.abs(t.amount_cents);
+
     if (!catByMonth.has(m)) catByMonth.set(m, new Map());
     const cm = catByMonth.get(m)!;
-    cm.set(t.category, (cm.get(t.category) ?? 0) + Math.abs(t.amount_cents));
+    cm.set(t.category, (cm.get(t.category) ?? 0) + cents);
+
+    if (m < currentKey) {
+      if (!catPriorDetails.has(t.category))
+        catPriorDetails.set(t.category, new Map());
+      const monthMap = catPriorDetails.get(t.category)!;
+      if (!monthMap.has(m)) monthMap.set(m, []);
+      const day = new Date(t.occurred_on + "T00:00:00").getDate();
+      monthMap.get(m)!.push({ day, cents });
+    }
   }
 
   const currentMonth = catByMonth.get(currentKey);
@@ -244,26 +263,55 @@ function detectAnomalies(ctx: IntelligenceContext): Pattern[] {
     const stdev = Math.sqrt(variance);
     if (stdev === 0) continue;
 
-    // Project to a full-month equivalent before comparing to the baseline.
+    // Learn the typical "fraction-complete by day N" for this category.
+    const monthDetails = catPriorDetails.get(cat);
+    if (!monthDetails) continue;
+
+    let progressSum = 0;
+    let progressCount = 0;
+    for (const m of priorMonths) {
+      const monthTxns = monthDetails.get(m) ?? [];
+      const monthTotal = monthTxns.reduce((s, x) => s + x.cents, 0);
+      if (monthTotal <= 0) continue;
+      const earlySum = monthTxns
+        .filter((x) => x.day <= dayOfMonth)
+        .reduce((s, x) => s + x.cents, 0);
+      progressSum += earlySum / monthTotal;
+      progressCount++;
+    }
+    if (progressCount === 0) continue;
+    const avgProgress = progressSum / progressCount;
+    if (avgProgress <= 0) continue;
+
+    // Project to full month, capped at 5× to bound extrapolation from
+    // tiny early-month samples (e.g. day 7, category 10% complete).
+    const projectionFactor = Math.min(1 / avgProgress, 5);
     const projected = currentCentsRaw * projectionFactor;
 
     const z = (projected - mean) / stdev;
     if (z <= 2.0) continue;
 
     const pctOver = Math.round((projected / mean - 1) * 100);
+    // If the category typically completes ≥95% of its monthly spend by today
+    // (e.g. rent), we treat the partial sum as effectively final and phrase
+    // it that way instead of "at your current pace."
+    const mostlyDone = avgProgress >= 0.95;
     results.push({
       kind: "anomaly",
       severity: z > 3.0 ? "high" : "watch",
-      title: `${labelFor(cat)} is tracking unusually high this month`,
-      detail: `At your current pace this month is heading toward ~$${(projected / 100).toFixed(2)} vs your typical $${(mean / 100).toFixed(2)}/mo (+${pctOver}%).`,
+      title: mostlyDone
+        ? `${labelFor(cat)} is higher than usual this month`
+        : `${labelFor(cat)} is tracking unusually high this month`,
+      detail: mostlyDone
+        ? `$${(projected / 100).toFixed(2)} so far vs your typical $${(mean / 100).toFixed(2)}/mo (+${pctOver}%).`
+        : `At your current pace this month is heading toward ~$${(projected / 100).toFixed(2)} vs your typical $${(mean / 100).toFixed(2)}/mo (+${pctOver}%).`,
       evidence: {
         category: cat,
         current_cents_so_far: Math.round(currentCentsRaw),
         projected_full_month_cents: Math.round(projected),
         prior_monthly_avg_cents: Math.round(mean),
         z_score: Math.round(z * 10) / 10,
-        day_of_month: dayOfMonth,
-        days_in_month: daysInMonth,
+        avg_prior_completion_by_today: Math.round(avgProgress * 100) / 100,
       },
     });
   }
