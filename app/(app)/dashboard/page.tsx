@@ -160,7 +160,10 @@ export default async function DashboardPage(props: {
             </CardContent>
           </Card>
         ) : (
-          <PersonaPicker variant="empty" />
+          <>
+            <PersonaPicker variant="empty" />
+            <RealDataCTA />
+          </>
         )
       ) : (
         <>
@@ -302,32 +305,7 @@ export default async function DashboardPage(props: {
           {showPersonaSwitcher && (
             <>
               <PersonaPicker variant="switcher" />
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    Set up your real data
-                  </CardTitle>
-                  <CardDescription>
-                    Add your first real account to switch out of sample
-                    mode — the sample data will be wiped automatically. You
-                    can{" "}
-                    <Link
-                      href="/settings"
-                      className="underline underline-offset-4 hover:text-foreground"
-                    >
-                      update your monthly income
-                    </Link>{" "}
-                    in settings any time.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    render={
-                      <Link href="/accounts/new">Add your first account</Link>
-                    }
-                  />
-                </CardContent>
-              </Card>
+              <RealDataCTA />
             </>
           )}
         </>
@@ -350,14 +328,7 @@ function PersonaPicker({ variant }: { variant: "empty" | "switcher" }) {
           <CardTitle>Try Signal with sample data</CardTitle>
           <CardDescription>
             Pick a persona to seed ~3 months of realistic transactions and an
-            income to match. Or{" "}
-            <Link
-              href="/transactions/new"
-              className="underline underline-offset-4 hover:text-foreground"
-            >
-              add your own transaction
-            </Link>
-            .
+            income to match.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -414,6 +385,38 @@ function PersonaPicker({ variant }: { variant: "empty" | "switcher" }) {
             </form>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * "Set up your real data" card — shown alongside the persona picker (empty
+ * state) and the persona switcher (sample-data state). Same content in both
+ * contexts: the offer to graduate to real data is identical, only the
+ * surrounding context differs.
+ */
+function RealDataCTA() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Set up your real data</CardTitle>
+        <CardDescription>
+          Add your first real account to start tracking your own activity.
+          Any sample data gets wiped at the same time. You can{" "}
+          <Link
+            href="/settings"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            update your monthly income
+          </Link>{" "}
+          in settings any time.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button
+          render={<Link href="/accounts/new">Add your first account</Link>}
+        />
       </CardContent>
     </Card>
   );
