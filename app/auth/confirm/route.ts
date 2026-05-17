@@ -22,7 +22,26 @@ export async function GET(request: NextRequest) {
       token_hash: tokenHash,
     });
     if (!error) {
+      // Email change has "secure_email_change" on in Supabase by default,
+      // which requires confirming from BOTH the old and new inbox. A
+      // single verifyOtp succeeding only confirms one side; the actual
+      // user.email doesn't flip until both are done. Route back to
+      // settings so the user can see the state (and the "click the other
+      // link too" message) instead of dumping them on the dashboard with
+      // no feedback.
+      if (type === "email_change") {
+        return NextResponse.redirect(
+          `${origin}/settings?info=email_change_confirmed`,
+        );
+      }
       return NextResponse.redirect(`${origin}${next}`);
+    }
+    // Email-change failures shouldn't bounce an already-authed user to
+    // the login page — keep them on settings with a useful message.
+    if (type === "email_change") {
+      return NextResponse.redirect(
+        `${origin}/settings?info=email_change_invalid&message=${encodeURIComponent(error.message)}`,
+      );
     }
   }
 

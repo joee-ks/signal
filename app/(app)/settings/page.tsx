@@ -53,8 +53,22 @@ export default async function SettingsPage(props: {
       {saved === "1" && <Banner tone="ok">Saved.</Banner>}
       {info === "email_change_sent" && (
         <Banner tone="ok">
-          Confirmation link sent. Open it from your new inbox to finish the
-          change.
+          Confirmation links sent to <strong>both</strong> your current
+          and new inboxes. Click the link in <em>both</em> to complete the
+          change — Signal confirms from both sides for security.
+        </Banner>
+      )}
+      {info === "email_change_confirmed" && (
+        <Banner tone="ok">
+          Confirmed from this inbox. If the email shown below still hasn&apos;t
+          changed, click the confirmation link in your other inbox too.
+        </Banner>
+      )}
+      {info === "email_change_invalid" && (
+        <Banner tone="warn">
+          Couldn&apos;t confirm the email change
+          {message ? `: ${decodeURIComponent(message)}` : "."} The link may
+          have expired — try sending a new one.
         </Banner>
       )}
       {info === "email_unchanged" && (
@@ -135,8 +149,9 @@ export default async function SettingsPage(props: {
         <CardHeader>
           <CardTitle>Account</CardTitle>
           <CardDescription>
-            Your sign-in email. Changing it requires confirming from the new
-            inbox.
+            Your sign-in email. Changing it requires clicking the
+            confirmation link sent to <strong>both</strong> your current
+            and new inboxes.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
