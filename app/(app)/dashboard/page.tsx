@@ -25,7 +25,7 @@ import {
 } from "@/components/narrative-card";
 import { formatCents } from "@/lib/format";
 import { labelFor } from "@/lib/categories";
-import { PERSONAS } from "@/lib/sample-data";
+import { PERSONAS, detectSamplePersona, type PersonaId } from "@/lib/sample-data";
 import type {
   IntelligenceResult,
   SubScoreKey,
@@ -109,6 +109,9 @@ export default async function DashboardPage(props: {
     (a) => !a.is_archived && !a.name.startsWith("Sample"),
   );
   const showPersonaSwitcher = hasTransactions && !hasOwnAccount;
+  // If all active accounts are samples, identify which persona is loaded so
+  // we can serve the pre-baked narrative instead of calling Claude.
+  const samplePersonaId = detectSamplePersona(accounts);
 
   const topPatterns = intel.patterns.slice(0, 3);
   const remainingPatterns = intel.patterns.length - topPatterns.length;
@@ -172,6 +175,7 @@ export default async function DashboardPage(props: {
               userId={user.id}
               intel={intel}
               currency={currency}
+              samplePersonaId={samplePersonaId}
             />
           </Suspense>
 
@@ -426,15 +430,18 @@ async function NarrativeBlock({
   userId,
   intel,
   currency,
+  samplePersonaId,
 }: {
   userId: string;
   intel: IntelligenceResult;
   currency: string;
+  samplePersonaId: PersonaId | null;
 }) {
   const supabase = await createClient();
   try {
     const result = await getOrGenerateNarrative(supabase, userId, intel, {
       currency,
+      samplePersonaId,
     });
     return (
       <NarrativeCard

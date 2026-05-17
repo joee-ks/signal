@@ -22,6 +22,7 @@ import {
 import { formatCents } from "@/lib/format";
 import { labelFor } from "@/lib/categories";
 import { getUserCurrency } from "@/lib/profile";
+import { detectSamplePersona, type PersonaId } from "@/lib/sample-data";
 import type { IntelligenceResult } from "@/lib/intelligence/types";
 
 const CADENCE_LABEL: Record<string, string> = {
@@ -40,10 +41,15 @@ export default async function SignalsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [intel, currency] = await Promise.all([
+  const [intel, currency, accountsQ] = await Promise.all([
     fetchAndComputeIntelligence(supabase, user.id),
     getUserCurrency(supabase, user.id),
+    supabase
+      .from("accounts")
+      .select("name, is_archived")
+      .eq("user_id", user.id),
   ]);
+  const samplePersonaId = detectSamplePersona(accountsQ.data ?? []);
 
   const recurringOut = intel.recurring.filter((r) => r.direction === "out");
   const recurringIn = intel.recurring.filter((r) => r.direction === "in");
@@ -63,6 +69,7 @@ export default async function SignalsPage() {
           userId={user.id}
           intel={intel}
           currency={currency}
+          samplePersonaId={samplePersonaId}
         />
       </Suspense>
 
@@ -208,15 +215,18 @@ async function NarrativeBlock({
   userId,
   intel,
   currency,
+  samplePersonaId,
 }: {
   userId: string;
   intel: IntelligenceResult;
   currency: string;
+  samplePersonaId: PersonaId | null;
 }) {
   const supabase = await createClient();
   try {
     const result = await getOrGenerateNarrative(supabase, userId, intel, {
       currency,
+      samplePersonaId,
     });
     return (
       <NarrativeCard

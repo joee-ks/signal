@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getPersona } from "@/lib/sample-data";
+import { detectSamplePersona, getPersona } from "@/lib/sample-data";
 import {
   fetchAndComputeIntelligence,
   getOrGenerateNarrative,
@@ -16,13 +16,21 @@ export async function recomputeNarrative() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [intel, currency] = await Promise.all([
+  const [intel, currency, accountsQ] = await Promise.all([
     fetchAndComputeIntelligence(supabase, user.id),
     getUserCurrency(supabase, user.id),
+    supabase
+      .from("accounts")
+      .select("name, is_archived")
+      .eq("user_id", user.id),
   ]);
+  // Sample personas use a pre-baked narrative — recompute would burn a
+  // Claude call to produce the same canned output. Detect and short-circuit.
+  const samplePersonaId = detectSamplePersona(accountsQ.data ?? []);
   await getOrGenerateNarrative(supabase, user.id, intel, {
     force: true,
     currency,
+    samplePersonaId,
   });
   redirect("/dashboard?info=recomputed");
 }

@@ -707,3 +707,24 @@ export const PERSONAS: readonly Persona[] = [
 export function getPersona(id: string | null | undefined): Persona {
   return PERSONAS.find((p) => p.id === id) ?? PERSONAS[0];
 }
+
+/**
+ * If the user's active accounts are all sample accounts, return the persona
+ * ID derived from the account name (loadSampleData names accounts
+ * `Sample Checking (PersonaLabel)`). Returns null if the user has any
+ * non-sample active account or no active accounts at all.
+ *
+ * Used to short-circuit the narrative generator and serve a pre-baked
+ * narrative instead of burning a Claude call on sample data.
+ */
+export function detectSamplePersona(
+  accounts: readonly { name: string; is_archived: boolean }[],
+): PersonaId | null {
+  const active = accounts.filter((a) => !a.is_archived);
+  if (active.length === 0) return null;
+  if (!active.every((a) => a.name.startsWith("Sample"))) return null;
+  const match = active[0].name.match(/\(([^)]+)\)\s*$/);
+  if (!match) return null;
+  const label = match[1].trim();
+  return PERSONAS.find((p) => p.label === label)?.id ?? null;
+}

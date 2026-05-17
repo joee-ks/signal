@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 import type { createClient } from "@/lib/supabase/server";
 import { nowInAppTz } from "@/lib/timezone";
+import { PERSONA_NARRATIVES } from "@/lib/persona-narratives";
+import type { PersonaId } from "@/lib/sample-data";
 import { computeIntelligence } from "./index";
 import {
   generateNarrative,
@@ -148,8 +150,29 @@ export async function getOrGenerateNarrative(
   supabase: SupaClient,
   userId: string,
   intel: IntelligenceResult,
-  options: { force?: boolean; currency?: string } = {},
+  options: {
+    force?: boolean;
+    currency?: string;
+    samplePersonaId?: PersonaId | null;
+  } = {},
 ): Promise<NarrativeFetchResult> {
+  // Sample personas return a pre-baked narrative without calling Claude.
+  // Zero token spend regardless of how many curious users explore samples
+  // or how many times they swap personas. `force` is ignored on purpose —
+  // recompute on sample data is meaningless since the canned narrative is
+  // evergreen.
+  if (options.samplePersonaId) {
+    const canned = PERSONA_NARRATIVES[options.samplePersonaId];
+    if (canned) {
+      return {
+        narrative: canned,
+        generated_at: new Date().toISOString(),
+        from_cache: true,
+        model: "sample",
+      };
+    }
+  }
+
   const currency = options.currency ?? "USD";
   const currentHash = shapeHash(intel, currency);
 
