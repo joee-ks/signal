@@ -127,7 +127,8 @@ lib/
 │   ├── server.ts       server client (async cookies)
 │   ├── middleware.ts   session refresh + route gate
 │   └── admin.ts        service-role client (admin ops only)
-├── sample-data.ts      seeded persona generators (balanced/tight/variable/saver)
+├── sample-data.ts      seeded persona generators (balanced/tight/variable/
+│                       saver/stacker/splurge)
 ├── categories.ts       canonical category list with bucket mapping
 ├── categorize.ts       rule-based categorizer
 ├── profile.ts          currency lookup + supported list
@@ -142,11 +143,10 @@ supabase/migrations/    SQL migrations (record-keeping; applied via dashboard)
 
 - Magic-link templates use `{{ .RedirectTo }}` (not `{{ .SiteURL }}`) so the
   same template works for both localhost and production.
-- Account balance is mutated by manual transaction create/update/delete only —
-  not by the future CSV import path (intentional: imports represent history
-  the user has already absorbed into their balance).
-- Sample data is tagged `source = 'sample'` and lives in `Sample %` accounts;
-  the persona picker wipes these before reseeding.
+- Account balance is mutated by manual transaction create/update/delete only.
+- Sample data is tagged `source = 'sample'` and lives in `Sample %` accounts.
+  Creating your own account auto-wipes any sample data; loading a persona is
+  refused if you already have a non-sample account.
 - The narrative layer never sees raw transactions — only the aggregated
   metrics, pattern summaries, and top 5 recurring charges. Privacy posture
   documented in `lib/intelligence/narrate.ts`.
