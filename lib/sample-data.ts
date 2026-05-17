@@ -652,7 +652,7 @@ export const PERSONAS: readonly Persona[] = [
     id: "balanced",
     label: "Balanced",
     description:
-      "Moderate income, slightly tight buffer; planted subscription creeps (info + watch) and a watch-level dining inflation.",
+      "Moderate income, slightly tight buffer; planted subscription creeps and a watch-level dining inflation.",
     monthly_income_cents: 480000,
     starting_balance_cents: 320000,
     generate: generateBalanced,
@@ -661,7 +661,7 @@ export const PERSONAS: readonly Persona[] = [
     id: "tight",
     label: "Tight budget",
     description:
-      "Essentials eat ~85% of income; near-zero cash buffer; student-loan debt; underwater on shock-resilience; plus a small recent streaming sub that fires a creep signal.",
+      "Essentials eat ~85% of income; near-zero cash buffer; student-loan debt; underwater on shock-resilience; plus a recent streaming sub that fires a creep signal.",
     monthly_income_cents: 250000,
     starting_balance_cents: 30000,
     generate: generateTight,
@@ -670,7 +670,7 @@ export const PERSONAS: readonly Persona[] = [
     id: "variable",
     label: "Variable income",
     description:
-      "Freelancer with irregular gig deposits plus an occasional dining splurge — triggers income-variability (high) and lifestyle-inflation (watch).",
+      "Freelancer with irregular gig deposits plus an occasional dining splurge — triggers income-variability and lifestyle-inflation signals.",
     monthly_income_cents: 350000,
     starting_balance_cents: 220000,
     generate: generateVariable,
@@ -688,7 +688,7 @@ export const PERSONAS: readonly Persona[] = [
     id: "stacker",
     label: "Subscription stacker",
     description:
-      "Healthy income, already-loaded streaming stack, plus three new subscriptions added in the last 35 days — showcases multiple subscription_creep signals.",
+      "Healthy income, already-loaded streaming stack, plus three new subscriptions added in the last 35 days — showcases multiple subscription creep signals.",
     monthly_income_cents: 450000,
     starting_balance_cents: 200000,
     generate: generateStacker,
@@ -697,7 +697,7 @@ export const PERSONAS: readonly Persona[] = [
     id: "splurge",
     label: "Lifestyle splurge",
     description:
-      "Healthy income with discretionary spending sharply elevated in the last 30 days across dining, coffee, and shopping — showcases lifestyle_inflation signals at high severity.",
+      "Healthy income with discretionary spending sharply elevated in the last 30 days — showcases lifestyle inflation signals at high severity.",
     monthly_income_cents: 550000,
     starting_balance_cents: 400000,
     generate: generateSplurge,
