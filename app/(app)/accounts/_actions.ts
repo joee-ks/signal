@@ -75,7 +75,17 @@ export async function createAccount(formData: FormData) {
     type: parsed.type,
     current_balance_cents: balanceCents,
   });
-  if (error) throw error;
+  if (error) {
+    // The 0004 migration's accounts_enforce_cap trigger raises with this
+    // message string when the user is already at the cap. The app-level
+    // pre-check above catches the common case, but the trigger is the
+    // race-safe authority for parallel requests. Surface as a friendly
+    // banner instead of bubbling a 500 to the user.
+    if (error.message?.includes("account_cap_exceeded")) {
+      redirect("/accounts?info=account_limit");
+    }
+    throw error;
+  }
   redirect("/accounts");
 }
 

@@ -57,8 +57,17 @@ Supabase SQL Editor (Dashboard → SQL Editor → New query → paste → Run):
 - `0001_init.sql` — schema (profiles, accounts, transactions, category_rules,
   signals_snapshots), Row-Level Security, the new-user trigger, ~140 seeded
   global category rules.
-- `0002_email_check.sql` — `email_has_account()` RPC used by the login page
-  to differentiate sign-up vs sign-in flows.
+- `0002_email_check.sql` — `email_has_account()` RPC originally used by the
+  login page. Superseded by 0003 — run it for historical completeness or
+  skip if you're applying migrations fresh.
+- `0003_drop_email_check.sql` — drops the RPC from 0002. The login flow now
+  uses a uniform auth call that leaks no information about which emails are
+  registered (no enumeration via the form).
+- `0004_account_cap_trigger.sql` — race-safe enforcement of the 12-account
+  cap via a `before insert` trigger that takes a per-user advisory lock.
+- `0005_atomic_balance.sql` — `adjust_account_balance(uuid, int)` RPC for
+  atomic balance updates, replacing the previous read-modify-write that
+  could race under concurrent transaction edits.
 
 **Auth URL configuration.** Dashboard → Authentication → URL Configuration:
 - Site URL: your production URL (e.g. `https://signal-steel.vercel.app`)

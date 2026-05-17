@@ -67,34 +67,24 @@ function buildTxnRow(parsed: z.infer<typeof baseSchema>) {
 }
 
 /**
- * Apply a delta to an account's current_balance_cents. Read-modify-write —
- * not strictly atomic, but RLS plus the explicit user_id filter ensure
- * cross-user safety, and the SubmitButton prevents same-user double-fires
- * from the UI. Used by manual add/edit/delete so the displayed balance
- * tracks reality as the user logs new activity.
+ * Apply a delta to an account's current_balance_cents atomically via the
+ * adjust_account_balance RPC (migration 0005). The RPC is SECURITY INVOKER
+ * so RLS still scopes the update to the caller's own accounts. The userId
+ * argument is no longer strictly needed by the RPC itself (RLS handles
+ * cross-user safety), but we keep it in the signature so callers stay
+ * explicit about who they're acting as.
  */
 async function adjustBalance(
   supabase: SupaClient,
-  userId: string,
+  _userId: string,
   accountId: string,
   delta: number,
 ) {
   if (delta === 0) return;
-  const { data: account } = await supabase
-    .from("accounts")
-    .select("current_balance_cents")
-    .eq("id", accountId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (!account) return;
-  await supabase
-    .from("accounts")
-    .update({
-      current_balance_cents:
-        (account.current_balance_cents ?? 0) + delta,
-    })
-    .eq("id", accountId)
-    .eq("user_id", userId);
+  await supabase.rpc("adjust_account_balance", {
+    p_account_id: accountId,
+    p_delta: delta,
+  });
 }
 
 export async function createTransaction(formData: FormData) {

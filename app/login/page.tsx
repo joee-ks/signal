@@ -18,6 +18,13 @@ import {
 
 type Mode = "signin" | "signup";
 
+/**
+ * Copy is mode-specific (sign-in vs sign-up) but the auth call is identical
+ * in both modes — we always pass shouldCreateUser: true and always show
+ * "check your inbox" regardless of whether the email is already registered.
+ * This means the page leaks no information about whether a given email is in
+ * the system; mode is purely a routing/copy convenience.
+ */
 const COPY: Record<
   Mode,
   {
@@ -30,9 +37,6 @@ const COPY: Record<
     switchPrompt: string;
     switchLink: string;
     switchHref: string;
-    wrongModeMessage: string;
-    wrongModeLink: string;
-    wrongModeHref: string;
   }
 > = {
   signin: {
@@ -44,16 +48,14 @@ const COPY: Record<
     sentTitle: "Check your email",
     sentDescription: (email) => (
       <>
-        We sent a sign-in link to <strong>{email}</strong>. Open it on this
-        device to continue.
+        We sent a link to <strong>{email}</strong>. Open it on this device to
+        sign in. If you don&apos;t have a Signal account yet, one will be
+        created for you when you click the link.
       </>
     ),
     switchPrompt: "New to Signal?",
     switchLink: "Create an account",
     switchHref: "/login?mode=signup",
-    wrongModeMessage: "No Signal account is registered to that email.",
-    wrongModeLink: "Create an account",
-    wrongModeHref: "/login?mode=signup",
   },
   signup: {
     title: "Create your account",
@@ -61,19 +63,17 @@ const COPY: Record<
       "Enter your email and we'll send you a sign-up link — no password needed.",
     submit: "Create account",
     submitting: "Sending…",
-    sentTitle: "Confirm your email",
+    sentTitle: "Check your email",
     sentDescription: (email) => (
       <>
-        We sent a confirmation link to <strong>{email}</strong>. Open it on
-        this device to finish creating your account.
+        We sent a link to <strong>{email}</strong>. Open it on this device to
+        finish setting up your account. If you already have one, the same link
+        will sign you in.
       </>
     ),
     switchPrompt: "Already have an account?",
     switchLink: "Sign in",
     switchHref: "/login",
-    wrongModeMessage: "That email is already registered.",
-    wrongModeLink: "Sign in instead",
-    wrongModeHref: "/login",
   },
 };
 
@@ -93,13 +93,9 @@ function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
-  const [wrongMode, setWrongMode] = useState(false);
 
   // Reset transient state when the user switches between sign-in and sign-up.
-  // The component instance is preserved across the URL change, so without this
-  // a stale wrongMode/sent from the previous mode would leak through.
   useEffect(() => {
-    setWrongMode(false);
     setSent(false);
     setLoading(false);
   }, [mode]);
@@ -109,33 +105,18 @@ function LoginPageContent() {
     const trimmed = email.trim();
     if (!trimmed) return;
 
-    setWrongMode(false);
     setLoading(true);
     const supabase = createClient();
 
-    // Pre-flight: does the email already have an account? Drives the
-    // "already registered" vs "no account found" guidance for each mode.
-    // If the RPC itself fails (e.g. migration not run yet), we fall through
-    // to the normal flow so the page stays usable.
-    const { data: existsRaw } = await supabase.rpc("email_has_account", {
-      p_email: trimmed,
-    });
-    const exists = typeof existsRaw === "boolean" ? existsRaw : null;
-
-    if (mode === "signup" && exists === true) {
-      setLoading(false);
-      setWrongMode(true);
-      return;
-    }
-    if (mode === "signin" && exists === false) {
-      setLoading(false);
-      setWrongMode(true);
-      return;
-    }
-
+    // Uniform flow: always allow account creation. The response is the same
+    // ("check your inbox") whether the account existed or was just created,
+    // so the form leaks no information about which emails are registered.
+    // If a user typed the wrong email in sign-in mode, clicking the link
+    // creates a fresh account they can delete from settings.
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
       options: {
+        shouldCreateUser: true,
         emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
     });
@@ -172,10 +153,7 @@ function LoginPageContent() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => {
-                    setSent(false);
-                    setWrongMode(false);
-                  }}
+                  onClick={() => setSent(false)}
                 >
                   Use a different email
                 </Button>
@@ -197,25 +175,11 @@ function LoginPageContent() {
                       autoComplete="email"
                       placeholder="you@example.com"
                       value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if (wrongMode) setWrongMode(false);
-                      }}
+                      onChange={(e) => setEmail(e.target.value)}
                       required
                       disabled={loading}
                     />
                   </div>
-                  {wrongMode && (
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-                      {copy.wrongModeMessage}{" "}
-                      <Link
-                        href={copy.wrongModeHref}
-                        className="font-medium underline underline-offset-4 hover:text-foreground"
-                      >
-                        {copy.wrongModeLink} →
-                      </Link>
-                    </div>
-                  )}
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? copy.submitting : copy.submit}
                   </Button>
