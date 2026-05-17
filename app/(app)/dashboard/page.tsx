@@ -135,7 +135,26 @@ export default async function DashboardPage(props: {
       )}
 
       {!hasTransactions ? (
-        <PersonaPicker variant="empty" />
+        hasOwnAccount ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Add your first transaction</CardTitle>
+              <CardDescription>
+                Your account is set up — log a transaction or two to start
+                seeing your Financial Health Score and signals.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                render={
+                  <Link href="/transactions/new">Add a transaction</Link>
+                }
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <PersonaPicker variant="empty" />
+        )
       ) : (
         <>
           <Suspense fallback={<NarrativeSkeleton />}>

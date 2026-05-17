@@ -32,6 +32,29 @@ export async function createAccount(formData: FormData) {
   const parsed = createSchema.parse(Object.fromEntries(formData));
   const { supabase, user } = await requireUser();
   const balanceCents = centsFromDollarString(parsed.balance) ?? 0;
+
+  // Auto-wipe any Sample-prefixed accounts: creating an own account means
+  // the user is past sample-data exploration, and we don't want sample
+  // transactions polluting the engine alongside their real history.
+  const { data: sampleAccts } = await supabase
+    .from("accounts")
+    .select("id")
+    .eq("user_id", user.id)
+    .ilike("name", "Sample%");
+  const sampleIds = (sampleAccts ?? []).map((a) => a.id as string);
+  if (sampleIds.length > 0) {
+    await supabase
+      .from("transactions")
+      .delete()
+      .in("account_id", sampleIds);
+    await supabase.from("accounts").delete().in("id", sampleIds);
+    // The cached narrative was based on sample data — invalidate it.
+    await supabase
+      .from("signals_snapshots")
+      .delete()
+      .eq("user_id", user.id);
+  }
+
   const { error } = await supabase.from("accounts").insert({
     user_id: user.id,
     name: parsed.name,

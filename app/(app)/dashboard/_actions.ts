@@ -44,7 +44,21 @@ export async function loadSampleData(formData: FormData) {
   const rawPersona = formData.get("persona");
   const persona = getPersona(typeof rawPersona === "string" ? rawPersona : null);
 
-  // 1. Identify the user's existing Sample-prefixed accounts.
+  // 1. Refuse if the user has any active account they created themselves
+  //    (non-Sample prefix, non-archived) — they're past sample exploration,
+  //    and we don't want sample data alongside their real history.
+  const { data: ownAccts } = await supabase
+    .from("accounts")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("is_archived", false)
+    .not("name", "ilike", "Sample%");
+  if ((ownAccts ?? []).length > 0) {
+    redirect("/dashboard?info=sample_skipped");
+  }
+
+  // 2. Identify existing Sample-prefixed accounts so we can wipe them
+  //    before reseeding with the new persona.
   const { data: sampleAccts } = await supabase
     .from("accounts")
     .select("id")
@@ -53,24 +67,6 @@ export async function loadSampleData(formData: FormData) {
   const sampleAccountIds = (sampleAccts ?? []).map(
     (a) => a.id as string,
   );
-
-  // 2. Refuse if any transactions exist OUTSIDE those sample accounts —
-  //    don't mix sample with real data.
-  let realTxnQ = supabase
-    .from("transactions")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id);
-  if (sampleAccountIds.length > 0) {
-    realTxnQ = realTxnQ.not(
-      "account_id",
-      "in",
-      `(${sampleAccountIds.join(",")})`,
-    );
-  }
-  const { count: realTxnCount } = await realTxnQ;
-  if ((realTxnCount ?? 0) > 0) {
-    redirect("/dashboard?info=sample_skipped");
-  }
 
   // 3. Wipe existing sample data (txns first due to FK, then accounts).
   if (sampleAccountIds.length > 0) {
