@@ -31,11 +31,10 @@ import type {
   SubScoreKey,
 } from "@/lib/intelligence/types";
 
-/** Format runway months with the right singular/plural unit. */
+/** Format runway as a decimal months value (always plural — "0.1 months" reads better than mixing units). */
 function runwayString(months: number | null): string {
   if (months == null) return "—";
-  const formatted = months.toFixed(1);
-  return `${formatted} ${formatted === "1.0" ? "month" : "months"}`;
+  return `${months.toFixed(1)} months`;
 }
 
 const SUB_SCORE_LABEL: Record<SubScoreKey, string> = {
