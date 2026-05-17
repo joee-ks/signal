@@ -1,3 +1,4 @@
+import { isVariableCategory } from "@/lib/categories";
 import type { Cadence, RecurringCharge, Transaction } from "./types";
 
 /**
@@ -46,6 +47,12 @@ export function detectRecurring(txns: Transaction[]): RecurringCharge[] {
   const groups = new Map<string, Transaction[]>();
   for (const t of txns) {
     if (t.bucket === "transfer") continue;
+    // Variable categories (dining, coffee, groceries, shopping, etc.) routinely
+    // produce repeat visits to the same merchant at similar amounts — two
+    // Chipotle bowls a couple weeks apart shouldnt register as a biweekly
+    // recurring charge. Real recurring charges live in the non-variable
+    // buckets (subscriptions, utilities, housing, insurance, income).
+    if (isVariableCategory(t.category)) continue;
     const key = normalizeMerchant(t.description);
     if (!key) continue;
     const sign = t.amount_cents < 0 ? "out" : "in";
