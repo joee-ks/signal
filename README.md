@@ -68,6 +68,9 @@ Supabase SQL Editor (Dashboard → SQL Editor → New query → paste → Run):
 - `0005_atomic_balance.sql` — `adjust_account_balance(uuid, int)` RPC for
   atomic balance updates, replacing the previous read-modify-write that
   could race under concurrent transaction edits.
+- `0006_security_warnings.sql` — pins `search_path` on `set_updated_at` and
+  revokes `EXECUTE` on `handle_new_user` from anon/authenticated/public.
+  Closes three Supabase security-advisor warnings without functional change.
 
 **Auth URL configuration.** Dashboard → Authentication → URL Configuration:
 - Site URL: your production URL (e.g. `https://signal-steel.vercel.app`)
