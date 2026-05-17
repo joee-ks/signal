@@ -31,6 +31,13 @@ import type {
   SubScoreKey,
 } from "@/lib/intelligence/types";
 
+/** Format runway months with the right singular/plural unit. */
+function runwayString(months: number | null): string {
+  if (months == null) return "—";
+  const formatted = months.toFixed(1);
+  return `${formatted} ${formatted === "1.0" ? "month" : "months"}`;
+}
+
 const SUB_SCORE_LABEL: Record<SubScoreKey, string> = {
   buffer: "Buffer / runway",
   stability: "Cash-flow stability",
@@ -113,7 +120,7 @@ export default async function DashboardPage(props: {
         <p className="text-sm text-muted-foreground">
           {profile?.display_name
             ? `Hi, ${profile.display_name}.`
-            : `Signed in as ${user.email}`}
+            : `Signed in as ${user.email}.`}
         </p>
       </div>
 
@@ -217,8 +224,8 @@ export default async function DashboardPage(props: {
           ) : (
             <Card>
               <CardContent className="py-6 text-sm text-muted-foreground">
-                No notable signals right now. Add more activity to surface
-                trends.
+                Nothing to flag right now. The more activity you record, the
+                more the engine can detect.
               </CardContent>
             </Card>
           )}
@@ -241,12 +248,8 @@ export default async function DashboardPage(props: {
                 }
               />
               <ForecastRow
-                label="Runway at current burn"
-                value={
-                  intel.forecast.runway_months != null
-                    ? `${intel.forecast.runway_months.toFixed(1)} months`
-                    : "—"
-                }
+                label="Runway"
+                value={runwayString(intel.forecast.runway_months)}
                 help="Liquid balance ÷ (essentials + half-discretionary + debt). What you'd last on if income stopped."
               />
               {intel.forecast.shock_drop && (

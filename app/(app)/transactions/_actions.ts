@@ -60,12 +60,8 @@ function buildTxnRow(parsed: z.infer<typeof baseSchema>) {
 /**
  * Apply a delta to an account's current_balance_cents. Read-modify-write —
  * not strictly atomic, but RLS ensures cross-user safety, and the SubmitButton
- * prevents same-user double-fires from the UI.
- *
- * Manual add/edit/delete uses this so the "current balance" tracks reality as
- * the user adds new activity. CSV imports (Phase 2.5) bypass these actions
- * and insert directly, preserving the imported-history-doesn't-rewrite-balance
- * semantic.
+ * prevents same-user double-fires from the UI. Used by manual add/edit/delete
+ * so the displayed balance tracks reality as the user logs new activity.
  */
 async function adjustBalance(
   supabase: SupaClient,

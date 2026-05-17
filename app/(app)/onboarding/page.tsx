@@ -133,7 +133,7 @@ export default async function OnboardingPage() {
           size="sm"
           pendingLabel="Skipping…"
         >
-          Skip setup — explore with sample data first →
+          Skip setup — explore with sample data first
         </SubmitButton>
         <p className="mt-1 text-xs text-muted-foreground">
           You can always add your income and accounts later in Settings.
