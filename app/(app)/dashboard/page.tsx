@@ -299,7 +299,37 @@ export default async function DashboardPage(props: {
             </Card>
           </div>
 
-          {showPersonaSwitcher && <PersonaPicker variant="switcher" />}
+          {showPersonaSwitcher && (
+            <>
+              <PersonaPicker variant="switcher" />
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    Set up your real data
+                  </CardTitle>
+                  <CardDescription>
+                    Add your first real account to switch out of sample
+                    mode — the sample data will be wiped automatically. You
+                    can{" "}
+                    <Link
+                      href="/settings"
+                      className="underline underline-offset-4 hover:text-foreground"
+                    >
+                      update your monthly income
+                    </Link>{" "}
+                    in settings any time.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    render={
+                      <Link href="/accounts/new">Add your first account</Link>
+                    }
+                  />
+                </CardContent>
+              </Card>
+            </>
+          )}
         </>
       )}
     </div>

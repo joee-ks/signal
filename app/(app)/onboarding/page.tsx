@@ -31,7 +31,7 @@ export default async function OnboardingPage() {
   if (profile?.onboarded_at) redirect("/dashboard");
 
   return (
-    <div className="mx-auto max-w-lg">
+    <div className="mx-auto max-w-lg space-y-4">
       <Card>
         <CardHeader>
           <CardTitle>Welcome to Signal</CardTitle>
@@ -127,18 +127,24 @@ export default async function OnboardingPage() {
         </CardContent>
       </Card>
 
-      <form action={skipOnboarding} className="text-center">
-        <SubmitButton
-          variant="link"
-          size="sm"
-          pendingLabel="Skipping…"
-        >
-          Skip setup — explore with sample data first
-        </SubmitButton>
-        <p className="mt-1 text-xs text-muted-foreground">
-          You can always add your income and accounts later in Settings.
-        </p>
-      </form>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Not ready?</CardTitle>
+          <CardDescription>
+            Skip setup and explore Signal with sample data first — pick a
+            persona on the dashboard and see how the engine reads ~3 months
+            of realistic activity. You can come back and add your income
+            and accounts whenever.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={skipOnboarding}>
+            <SubmitButton variant="outline" pendingLabel="Skipping…">
+              Skip setup and explore samples
+            </SubmitButton>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
