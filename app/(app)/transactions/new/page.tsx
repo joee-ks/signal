@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 import { CATEGORIES } from "@/lib/categories";
+import { todayYmd } from "@/lib/timezone";
 
 export const metadata = { title: "Add transaction" };
 
@@ -27,7 +28,7 @@ export default async function NewTransactionPage() {
     .order("created_at", { ascending: true });
   if (!accounts || accounts.length === 0) redirect("/accounts/new");
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayYmd();
 
   return (
     <div className="mx-auto max-w-md">

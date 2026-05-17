@@ -1,5 +1,6 @@
 import { addDays, differenceInDays, format, subDays } from "date-fns";
 import type { Bucket } from "@/lib/categories";
+import { nowInAppTz } from "@/lib/timezone";
 
 /**
  * Start of the sample data window: the 1st of the month, 3 calendar months
@@ -186,7 +187,7 @@ const TRANSPORT = [
 
 function generateBalanced(opts: { seed?: number } = {}): SampleTransaction[] {
   const rng = makeRng(opts.seed ?? 42);
-  const today = new Date();
+  const today = nowInAppTz();
   today.setHours(0, 0, 0, 0);
   const start = periodStart(today);
   const out: SampleTransaction[] = [];
@@ -292,7 +293,7 @@ function generateBalanced(opts: { seed?: number } = {}): SampleTransaction[] {
 
 function generateTight(opts: { seed?: number } = {}): SampleTransaction[] {
   const rng = makeRng(opts.seed ?? 43);
-  const today = new Date();
+  const today = nowInAppTz();
   today.setHours(0, 0, 0, 0);
   const start = periodStart(today);
   const out: SampleTransaction[] = [];
@@ -363,7 +364,7 @@ function generateTight(opts: { seed?: number } = {}): SampleTransaction[] {
 
 function generateVariable(opts: { seed?: number } = {}): SampleTransaction[] {
   const rng = makeRng(opts.seed ?? 44);
-  const today = new Date();
+  const today = nowInAppTz();
   today.setHours(0, 0, 0, 0);
   const start = periodStart(today);
   const out: SampleTransaction[] = [];
@@ -430,7 +431,7 @@ function generateVariable(opts: { seed?: number } = {}): SampleTransaction[] {
 
 function generateSaver(opts: { seed?: number } = {}): SampleTransaction[] {
   const rng = makeRng(opts.seed ?? 45);
-  const today = new Date();
+  const today = nowInAppTz();
   today.setHours(0, 0, 0, 0);
   const start = periodStart(today);
   const out: SampleTransaction[] = [];
@@ -478,7 +479,7 @@ function generateSaver(opts: { seed?: number } = {}): SampleTransaction[] {
 
 function generateStacker(opts: { seed?: number } = {}): SampleTransaction[] {
   const rng = makeRng(opts.seed ?? 46);
-  const today = new Date();
+  const today = nowInAppTz();
   today.setHours(0, 0, 0, 0);
   const start = periodStart(today);
   const out: SampleTransaction[] = [];
@@ -572,7 +573,7 @@ function generateStacker(opts: { seed?: number } = {}): SampleTransaction[] {
 
 function generateSplurge(opts: { seed?: number } = {}): SampleTransaction[] {
   const rng = makeRng(opts.seed ?? 47);
-  const today = new Date();
+  const today = nowInAppTz();
   today.setHours(0, 0, 0, 0);
   const start = periodStart(today);
   const out: SampleTransaction[] = [];

@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import type { createClient } from "@/lib/supabase/server";
+import { nowInAppTz } from "@/lib/timezone";
 import { computeIntelligence } from "./index";
 import {
   generateNarrative,
@@ -269,6 +270,6 @@ export async function fetchAndComputeIntelligence(
       category: t.category ?? "uncategorized",
       bucket: t.bucket ?? "discretionary",
     })),
-    today: new Date(),
+    today: nowInAppTz(),
   });
 }

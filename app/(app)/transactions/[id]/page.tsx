@@ -10,6 +10,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
 import { CATEGORIES } from "@/lib/categories";
 import { dollarsFromCents } from "@/lib/format";
+import { todayYmd } from "@/lib/timezone";
 
 type TxnRow = {
   id: string;
@@ -48,7 +49,7 @@ export default async function EditTransactionPage(props: {
 
   const direction = txn.amount_cents < 0 ? "out" : "in";
   const dollars = dollarsFromCents(Math.abs(txn.amount_cents));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayYmd();
 
   return (
     <div className="mx-auto max-w-md space-y-4">

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { centsFromDollarString } from "@/lib/format";
 import { bucketFor } from "@/lib/categories";
+import { todayYmd, addDaysToYmd } from "@/lib/timezone";
 
 const baseSchema = z.object({
   account_id: z.string().uuid(),
@@ -14,11 +15,9 @@ const baseSchema = z.object({
     .refine((d) => {
       // No future-dating. The intelligence engine assumes all transactions
       // are in the past — a future-dated row would skew month-to-date totals,
-      // forecasts, and anomaly detection. Allow 1 day of slop so users in
-      // timezones ahead of UTC aren't blocked from logging "today".
-      const grace = new Date();
-      grace.setUTCDate(grace.getUTCDate() + 1);
-      return d <= grace.toISOString().slice(0, 10);
+      // forecasts, and anomaly detection. App "today" is US Eastern; allow
+      // 1 day of slop in case a user in a different timezone slips through.
+      return d <= addDaysToYmd(todayYmd(), 1);
     }, "Date cannot be in the future."),
   direction: z.enum(["in", "out"]),
   amount: z.string().trim().min(1),
