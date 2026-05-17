@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { createAccount } from "../_actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,10 +8,28 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/submit-button";
 import { Select } from "@/components/select";
+import { MAX_ACCOUNTS_PER_USER } from "@/lib/profile";
 
 export const metadata = { title: "Add account" };
 
-export default function NewAccountPage() {
+export default async function NewAccountPage() {
+  // Guard: if the user is already at the active-accounts cap, bounce back
+  // to the list with the limit notice rather than showing a form whose
+  // submission would just fail.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const { count } = await supabase
+    .from("accounts")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("is_archived", false);
+  if ((count ?? 0) >= MAX_ACCOUNTS_PER_USER) {
+    redirect("/accounts?info=account_limit");
+  }
+
   return (
     <div className="mx-auto max-w-md">
       <Card>

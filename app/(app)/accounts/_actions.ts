@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { centsFromDollarString } from "@/lib/format";
+import { MAX_ACCOUNTS_PER_USER } from "@/lib/profile";
 
 const ACCOUNT_TYPES = ["checking", "savings", "credit", "cash", "other"] as const;
 
@@ -53,6 +54,19 @@ export async function createAccount(formData: FormData) {
       .from("signals_snapshots")
       .delete()
       .eq("user_id", user.id);
+  }
+
+  // Enforce the soft cap on active accounts. Run AFTER the sample wipe
+  // above so we count only what the user really has post-cleanup —
+  // otherwise sample accounts (which we're about to delete) would
+  // unfairly push them over the limit.
+  const { count: activeCount } = await supabase
+    .from("accounts")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("is_archived", false);
+  if ((activeCount ?? 0) >= MAX_ACCOUNTS_PER_USER) {
+    redirect("/accounts?info=account_limit");
   }
 
   const { error } = await supabase.from("accounts").insert({

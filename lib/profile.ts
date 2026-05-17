@@ -15,6 +15,14 @@ export type CurrencyCode = (typeof SUPPORTED_CURRENCIES)[number]["code"];
 
 export const DEFAULT_CURRENCY: CurrencyCode = "USD";
 
+/**
+ * Soft cap on the number of active (non-archived) accounts per user. The
+ * intelligence engine doesn't get more accurate past a handful of accounts —
+ * the limit exists to keep the UI tidy and prevent accidental duplicates.
+ * Archived accounts don't count against this; they're effectively gone.
+ */
+export const MAX_ACCOUNTS_PER_USER = 12;
+
 /** Fetch just the user's currency preference. Defaults to USD if unset. */
 export async function getUserCurrency(
   supabase: SupaClient,

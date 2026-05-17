@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCents } from "@/lib/format";
-import { getUserCurrency } from "@/lib/profile";
+import { getUserCurrency, MAX_ACCOUNTS_PER_USER } from "@/lib/profile";
 
 const TYPE_LABEL: Record<string, string> = {
   checking: "Checking",
@@ -25,7 +25,10 @@ type AccountRow = {
 
 export const metadata = { title: "Accounts" };
 
-export default async function AccountsPage() {
+export default async function AccountsPage(props: {
+  searchParams: Promise<{ info?: string }>;
+}) {
+  const { info } = await props.searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -49,6 +52,7 @@ export default async function AccountsPage() {
     (s, a) => s + (a.current_balance_cents ?? 0),
     0,
   );
+  const atLimit = active.length >= MAX_ACCOUNTS_PER_USER;
 
   return (
     <div className="space-y-6">
@@ -60,10 +64,22 @@ export default async function AccountsPage() {
             <span className="font-medium text-foreground tabular-nums">
               {formatCents(netWorth, { currency })}
             </span>
+            <span className="ml-2">
+              · {active.length} / {MAX_ACCOUNTS_PER_USER} accounts
+            </span>
           </p>
         </div>
-        <Button render={<Link href="/accounts/new">Add account</Link>} />
+        {!atLimit && (
+          <Button render={<Link href="/accounts/new">Add account</Link>} />
+        )}
       </div>
+
+      {info === "account_limit" && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+          You&apos;ve hit the {MAX_ACCOUNTS_PER_USER}-account cap. Archive
+          an account you&apos;re not using to free up a slot.
+        </div>
+      )}
 
       {active.length === 0 ? (
         <Card>

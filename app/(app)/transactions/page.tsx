@@ -4,8 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/select";
+import { SubmitButton } from "@/components/submit-button";
 import { formatCents, formatDate } from "@/lib/format";
-import { labelFor } from "@/lib/categories";
+import { CATEGORIES, labelFor } from "@/lib/categories";
 import { getUserCurrency } from "@/lib/profile";
 
 type TxnRow = {
@@ -20,12 +24,52 @@ type TxnRow = {
 
 export const metadata = { title: "Transactions" };
 
-export default async function TransactionsPage() {
+const RESULT_LIMIT = 200;
+
+/**
+ * Escape characters that have special meaning inside a Supabase `or(...)`
+ * comma-separated filter expression. Without this, a comma in the user's
+ * search input would split the expression into multiple filters.
+ */
+function escapeForOr(value: string): string {
+  return value.replace(/[,()]/g, " ");
+}
+
+export default async function TransactionsPage(props: {
+  searchParams: Promise<{ q?: string; category?: string }>;
+}) {
+  const { q: rawQ, category: rawCategory } = await props.searchParams;
+  const q = (rawQ ?? "").trim();
+  const category = (rawCategory ?? "").trim();
+  const hasFilters = q.length > 0 || category.length > 0;
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Build the transactions query with filters applied at the DB level so
+  // we don't pull 200 rows just to throw most away client-side. Search
+  // hits both description and merchant via Postgres ILIKE.
+  let txnsQuery = supabase
+    .from("transactions")
+    .select(
+      "id, occurred_on, amount_cents, description, category, account_id, is_recurring",
+    )
+    .eq("user_id", user.id)
+    .order("occurred_on", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(RESULT_LIMIT);
+  if (q) {
+    const safe = escapeForOr(q);
+    txnsQuery = txnsQuery.or(
+      `description.ilike.%${safe}%,merchant.ilike.%${safe}%`,
+    );
+  }
+  if (category) {
+    txnsQuery = txnsQuery.eq("category", category);
+  }
 
   const [accountsQ, txnsQ, currency] = await Promise.all([
     supabase
@@ -33,15 +77,7 @@ export default async function TransactionsPage() {
       .select("id, name")
       .eq("user_id", user.id)
       .eq("is_archived", false),
-    supabase
-      .from("transactions")
-      .select(
-        "id, occurred_on, amount_cents, description, category, account_id, is_recurring",
-      )
-      .eq("user_id", user.id)
-      .order("occurred_on", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(200),
+    txnsQuery,
     getUserCurrency(supabase, user.id),
   ]);
   const hasAccounts = (accountsQ.data ?? []).length > 0;
@@ -49,10 +85,13 @@ export default async function TransactionsPage() {
     (accountsQ.data ?? []).map((a) => [a.id as string, a.name as string]),
   );
   // Drop transactions whose account isn't in the active set (i.e. archived).
-  // accountsQ already filters out archived accounts, so the map check is enough.
   const txns: TxnRow[] = ((txnsQ.data ?? []) as TxnRow[]).filter((t) =>
     accountNameMap.has(t.account_id),
   );
+
+  const countCopy = hasFilters
+    ? `${txns.length} ${txns.length === 1 ? "match" : "matches"}`
+    : `Most recent first · showing up to ${RESULT_LIMIT}`;
 
   return (
     <div className="space-y-6">
@@ -61,9 +100,7 @@ export default async function TransactionsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">
             Transactions
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Most recent first · showing up to 200
-          </p>
+          <p className="text-sm text-muted-foreground">{countCopy}</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -75,6 +112,53 @@ export default async function TransactionsPage() {
           )}
         </div>
       </div>
+
+      {hasAccounts && (
+        <Card>
+          <CardContent className="pt-4">
+            <form
+              method="get"
+              className="flex flex-col gap-3 sm:flex-row sm:items-end"
+            >
+              <div className="flex-1 space-y-1.5">
+                <Label htmlFor="q" className="text-xs">
+                  Search description
+                </Label>
+                <Input
+                  id="q"
+                  name="q"
+                  type="search"
+                  defaultValue={q}
+                  placeholder="amazon, chipotle, paycheck…"
+                />
+              </div>
+              <div className="space-y-1.5 sm:w-48">
+                <Label htmlFor="category" className="text-xs">
+                  Category
+                </Label>
+                <Select id="category" name="category" defaultValue={category}>
+                  <option value="">All categories</option>
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex gap-2">
+                <SubmitButton variant="outline">Apply</SubmitButton>
+                {hasFilters && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    render={<Link href="/transactions">Clear</Link>}
+                  />
+                )}
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {!hasAccounts ? (
         <Card>
@@ -92,14 +176,29 @@ export default async function TransactionsPage() {
       ) : txns.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No transactions yet.{" "}
-            <Link
-              href="/transactions/new"
-              className="font-medium text-foreground underline-offset-4 hover:underline"
-            >
-              Add one
-            </Link>
-            .
+            {hasFilters ? (
+              <>
+                No transactions match those filters.{" "}
+                <Link
+                  href="/transactions"
+                  className="font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  Clear
+                </Link>
+                .
+              </>
+            ) : (
+              <>
+                No transactions yet.{" "}
+                <Link
+                  href="/transactions/new"
+                  className="font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  Add one
+                </Link>
+                .
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
