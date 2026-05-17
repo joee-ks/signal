@@ -16,9 +16,6 @@ export default async function Home(props: {
         )}
         {/* Hero */}
         <section className="flex flex-col items-center gap-6 text-center">
-          <span className="inline-block rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">
-            Financial health &amp; intelligence
-          </span>
           <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
             Find the signal in your spending.
           </h1>
@@ -75,7 +72,7 @@ export default async function Home(props: {
             <Step
               n={2}
               title="Log activity"
-              description="Add transactions yourself or import a bank export. Common merchants get auto-categorized out of the box."
+              description="Add transactions as they happen. Common merchants get auto-categorized out of the box."
             />
             <Step
               n={3}
@@ -104,7 +101,12 @@ export default async function Home(props: {
             <Link href="/login" className="hover:text-foreground">
               Sign in
             </Link>
-            <span className="opacity-50">Privacy · Terms (coming soon)</span>
+            <Link href="/privacy" className="hover:text-foreground">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:text-foreground">
+              Terms
+            </Link>
           </div>
         </div>
       </footer>
