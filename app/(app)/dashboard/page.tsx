@@ -507,14 +507,12 @@ function ForecastRow({
   help?: string;
 }) {
   return (
-    <div>
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{label}</p>
-        <p className="shrink-0 text-base font-semibold tabular-nums">{value}</p>
+        {help && <p className="text-xs text-muted-foreground">{help}</p>}
       </div>
-      {help && (
-        <p className="mt-1 text-xs text-muted-foreground">{help}</p>
-      )}
+      <p className="shrink-0 text-base font-semibold tabular-nums">{value}</p>
     </div>
   );
 }
