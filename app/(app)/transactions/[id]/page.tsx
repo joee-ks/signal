@@ -48,6 +48,7 @@ export default async function EditTransactionPage(props: {
 
   const direction = txn.amount_cents < 0 ? "out" : "in";
   const dollars = dollarsFromCents(Math.abs(txn.amount_cents));
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -66,6 +67,7 @@ export default async function EditTransactionPage(props: {
                   name="occurred_on"
                   type="date"
                   defaultValue={txn.occurred_on}
+                  max={today}
                   required
                 />
               </div>

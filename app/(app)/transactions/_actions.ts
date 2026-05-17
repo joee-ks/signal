@@ -8,7 +8,18 @@ import { bucketFor } from "@/lib/categories";
 
 const baseSchema = z.object({
   account_id: z.string().uuid(),
-  occurred_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  occurred_on: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((d) => {
+      // No future-dating. The intelligence engine assumes all transactions
+      // are in the past — a future-dated row would skew month-to-date totals,
+      // forecasts, and anomaly detection. Allow 1 day of slop so users in
+      // timezones ahead of UTC aren't blocked from logging "today".
+      const grace = new Date();
+      grace.setUTCDate(grace.getUTCDate() + 1);
+      return d <= grace.toISOString().slice(0, 10);
+    }, "Date cannot be in the future."),
   direction: z.enum(["in", "out"]),
   amount: z.string().trim().min(1),
   description: z.string().trim().max(200).optional().or(z.literal("")),

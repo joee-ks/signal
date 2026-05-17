@@ -45,6 +45,7 @@ export default async function NewTransactionPage() {
                   name="occurred_on"
                   type="date"
                   defaultValue={today}
+                  max={today}
                   required
                 />
               </div>
