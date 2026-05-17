@@ -81,7 +81,7 @@ export async function createAccount(formData: FormData) {
 
 export async function updateAccount(formData: FormData) {
   const parsed = updateSchema.parse(Object.fromEntries(formData));
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const balanceCents = centsFromDollarString(parsed.balance) ?? 0;
   const { error } = await supabase
     .from("accounts")
@@ -90,29 +90,32 @@ export async function updateAccount(formData: FormData) {
       type: parsed.type,
       current_balance_cents: balanceCents,
     })
-    .eq("id", parsed.id);
+    .eq("id", parsed.id)
+    .eq("user_id", user.id);
   if (error) throw error;
   redirect("/accounts");
 }
 
 export async function archiveAccount(formData: FormData) {
   const { id } = idSchema.parse(Object.fromEntries(formData));
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const { error } = await supabase
     .from("accounts")
     .update({ is_archived: true })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
   if (error) throw error;
   redirect("/accounts");
 }
 
 export async function unarchiveAccount(formData: FormData) {
   const { id } = idSchema.parse(Object.fromEntries(formData));
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const { error } = await supabase
     .from("accounts")
     .update({ is_archived: false })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
   if (error) throw error;
   redirect("/accounts");
 }
@@ -134,13 +137,15 @@ export async function deleteAccount(formData: FormData) {
     .from("accounts")
     .select("id, is_archived")
     .eq("id", id)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (!account) throw new Error("Account not found.");
 
   const { count } = await supabase
     .from("transactions")
     .select("id", { count: "exact", head: true })
-    .eq("account_id", id);
+    .eq("account_id", id)
+    .eq("user_id", user.id);
   const hasTransactions = (count ?? 0) > 0;
 
   // Active account with transactions: must archive first.
@@ -161,11 +166,16 @@ export async function deleteAccount(formData: FormData) {
     const { error: txErr } = await supabase
       .from("transactions")
       .delete()
-      .eq("account_id", id);
+      .eq("account_id", id)
+      .eq("user_id", user.id);
     if (txErr) throw txErr;
   }
 
-  const { error } = await supabase.from("accounts").delete().eq("id", id);
+  const { error } = await supabase
+    .from("accounts")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
   if (error) throw error;
 
   // Invalidate the cached narrative — the underlying intel just changed materially.

@@ -137,6 +137,12 @@ export default async function DashboardPage(props: {
           it with your own.
         </div>
       )}
+      {info === "sample_throttled" && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+          Just loaded sample data — give it a moment before switching personas
+          again.
+        </div>
+      )}
       {info === "recomputed" && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
           Signals recomputed.

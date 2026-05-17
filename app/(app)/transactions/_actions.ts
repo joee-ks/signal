@@ -4,8 +4,15 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { centsFromDollarString } from "@/lib/format";
-import { bucketFor } from "@/lib/categories";
+import { CATEGORIES, bucketFor } from "@/lib/categories";
 import { todayYmd, addDaysToYmd } from "@/lib/timezone";
+
+// Tuple form required by z.enum — derived from the canonical CATEGORIES
+// list so the validator and the UI dropdown can never drift apart.
+const CATEGORY_VALUES = CATEGORIES.map((c) => c.value) as unknown as readonly [
+  string,
+  ...string[],
+];
 
 const baseSchema = z.object({
   account_id: z.string().uuid(),
@@ -22,7 +29,9 @@ const baseSchema = z.object({
   direction: z.enum(["in", "out"]),
   amount: z.string().trim().min(1),
   description: z.string().trim().max(200).optional().or(z.literal("")),
-  category: z.string().trim().min(1).max(40),
+  // Whitelist against the canonical list — prevents arbitrary strings from
+  // landing in the DB and flowing through to the Claude prompt later.
+  category: z.enum(CATEGORY_VALUES),
 });
 
 const createSchema = baseSchema;
@@ -59,12 +68,14 @@ function buildTxnRow(parsed: z.infer<typeof baseSchema>) {
 
 /**
  * Apply a delta to an account's current_balance_cents. Read-modify-write —
- * not strictly atomic, but RLS ensures cross-user safety, and the SubmitButton
- * prevents same-user double-fires from the UI. Used by manual add/edit/delete
- * so the displayed balance tracks reality as the user logs new activity.
+ * not strictly atomic, but RLS plus the explicit user_id filter ensure
+ * cross-user safety, and the SubmitButton prevents same-user double-fires
+ * from the UI. Used by manual add/edit/delete so the displayed balance
+ * tracks reality as the user logs new activity.
  */
 async function adjustBalance(
   supabase: SupaClient,
+  userId: string,
   accountId: string,
   delta: number,
 ) {
@@ -73,6 +84,7 @@ async function adjustBalance(
     .from("accounts")
     .select("current_balance_cents")
     .eq("id", accountId)
+    .eq("user_id", userId)
     .maybeSingle();
   if (!account) return;
   await supabase
@@ -81,7 +93,8 @@ async function adjustBalance(
       current_balance_cents:
         (account.current_balance_cents ?? 0) + delta,
     })
-    .eq("id", accountId);
+    .eq("id", accountId)
+    .eq("user_id", userId);
 }
 
 export async function createTransaction(formData: FormData) {
@@ -95,37 +108,40 @@ export async function createTransaction(formData: FormData) {
   });
   if (error) throw error;
 
-  await adjustBalance(supabase, row.account_id, row.amount_cents);
+  await adjustBalance(supabase, user.id, row.account_id, row.amount_cents);
   redirect("/transactions");
 }
 
 export async function updateTransaction(formData: FormData) {
   const parsed = updateSchema.parse(Object.fromEntries(formData));
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const newRow = buildTxnRow(parsed);
 
-  // Fetch old values to compute balance delta(s).
+  // Fetch old values to compute balance delta(s). Explicit user_id filter
+  // ensures defense in depth — RLS would also block cross-user reads.
   const { data: old } = await supabase
     .from("transactions")
     .select("account_id, amount_cents")
     .eq("id", parsed.id)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (!old) throw new Error("Transaction not found.");
 
   const { error } = await supabase
     .from("transactions")
     .update(newRow)
-    .eq("id", parsed.id);
+    .eq("id", parsed.id)
+    .eq("user_id", user.id);
   if (error) throw error;
 
   if (old.account_id !== newRow.account_id) {
     // Moved between accounts: revert on the old, apply on the new.
-    await adjustBalance(supabase, old.account_id, -old.amount_cents);
-    await adjustBalance(supabase, newRow.account_id, newRow.amount_cents);
+    await adjustBalance(supabase, user.id, old.account_id, -old.amount_cents);
+    await adjustBalance(supabase, user.id, newRow.account_id, newRow.amount_cents);
   } else {
     const delta = newRow.amount_cents - old.amount_cents;
     if (delta !== 0) {
-      await adjustBalance(supabase, newRow.account_id, delta);
+      await adjustBalance(supabase, user.id, newRow.account_id, delta);
     }
   }
   redirect("/transactions");
@@ -133,21 +149,23 @@ export async function updateTransaction(formData: FormData) {
 
 export async function deleteTransaction(formData: FormData) {
   const { id } = idSchema.parse(Object.fromEntries(formData));
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
 
   const { data: old } = await supabase
     .from("transactions")
     .select("account_id, amount_cents")
     .eq("id", id)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (!old) throw new Error("Transaction not found.");
 
   const { error } = await supabase
     .from("transactions")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
   if (error) throw error;
 
-  await adjustBalance(supabase, old.account_id, -old.amount_cents);
+  await adjustBalance(supabase, user.id, old.account_id, -old.amount_cents);
   redirect("/transactions");
 }

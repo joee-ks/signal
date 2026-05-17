@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -65,12 +64,12 @@ export async function requestEmailChange(formData: FormData) {
     redirect("/settings?info=email_unchanged");
   }
 
-  // Build the absolute origin for the confirmation link. We respect
-  // x-forwarded-proto/host so this works behind Vercel's edge.
-  const hdrs = await headers();
-  const proto = hdrs.get("x-forwarded-proto") ?? "http";
-  const host = hdrs.get("host") ?? "localhost:3000";
-  const origin = `${proto}://${host}`;
+  // Build the absolute origin for the confirmation link from our own
+  // env var rather than the request's Host header — Host is attacker-
+  // controllable in some configurations, and a forged value would route
+  // the confirmation link (and its token) to an attacker-controlled
+  // domain. NEXT_PUBLIC_SITE_URL is set by us per environment.
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
   const { error } = await supabase.auth.updateUser(
     { email: parsed.new_email },

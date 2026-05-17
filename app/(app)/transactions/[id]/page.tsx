@@ -37,6 +37,7 @@ export default async function EditTransactionPage(props: {
     .from("transactions")
     .select("id, occurred_on, amount_cents, description, category, account_id")
     .eq("id", id)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (!txnData) notFound();
   const txn = txnData as TxnRow;

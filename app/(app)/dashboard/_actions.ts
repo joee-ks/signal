@@ -86,16 +86,30 @@ export async function loadSampleData(formData: FormData) {
     redirect("/dashboard?info=sample_skipped");
   }
 
-  // 2. Identify existing Sample-prefixed accounts so we can wipe them
-  //    before reseeding with the new persona.
+  // 2. Identify existing Sample-prefixed accounts. Used for two things:
+  //    (a) the wipe + reseed below, and (b) a 30s throttle — each persona
+  //    swap issues ~150 inserts, so a spam loop would churn the DB hard.
+  //    30s is plenty for a curious user to pick the next persona but
+  //    enough friction to deter scripted abuse.
   const { data: sampleAccts } = await supabase
     .from("accounts")
-    .select("id")
+    .select("id, created_at")
     .eq("user_id", user.id)
-    .ilike("name", "Sample%");
+    .ilike("name", "Sample%")
+    .order("created_at", { ascending: false });
   const sampleAccountIds = (sampleAccts ?? []).map(
     (a) => a.id as string,
   );
+  const lastSampleCreatedAt = (sampleAccts ?? [])[0]?.created_at as
+    | string
+    | undefined;
+  if (lastSampleCreatedAt) {
+    const ageSec =
+      (Date.now() - new Date(lastSampleCreatedAt).getTime()) / 1000;
+    if (ageSec < 30) {
+      redirect("/dashboard?info=sample_throttled");
+    }
+  }
 
   // 3. Wipe existing sample data (txns first due to FK, then accounts).
   if (sampleAccountIds.length > 0) {

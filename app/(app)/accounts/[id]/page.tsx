@@ -28,11 +28,17 @@ export default async function EditAccountPage(props: {
   if (!user) redirect("/login");
 
   const [{ data: account }, { count: txCount }] = await Promise.all([
-    supabase.from("accounts").select("*").eq("id", id).maybeSingle(),
+    supabase
+      .from("accounts")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
     supabase
       .from("transactions")
       .select("id", { count: "exact", head: true })
-      .eq("account_id", id),
+      .eq("account_id", id)
+      .eq("user_id", user.id),
   ]);
   if (!account) notFound();
 
