@@ -688,7 +688,7 @@ export const PERSONAS: readonly Persona[] = [
     id: "stacker",
     label: "Subscription stacker",
     description:
-      "Healthy income, already-loaded streaming stack, plus three new subscriptions added in the last 35 days — showcases multiple subscription creep signals.",
+      "Healthy income, already-loaded streaming stack with 3 new subscriptions added in the last 35 days — showcases multiple subscription creep signals.",
     monthly_income_cents: 450000,
     starting_balance_cents: 200000,
     generate: generateStacker,
