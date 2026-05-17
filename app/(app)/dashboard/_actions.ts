@@ -16,17 +16,38 @@ export async function recomputeNarrative() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [intel, currency, accountsQ] = await Promise.all([
+  const [intel, currency, accountsQ, snapshotQ] = await Promise.all([
     fetchAndComputeIntelligence(supabase, user.id),
     getUserCurrency(supabase, user.id),
     supabase
       .from("accounts")
       .select("name, is_archived")
       .eq("user_id", user.id),
+    supabase
+      .from("signals_snapshots")
+      .select("generated_at")
+      .eq("user_id", user.id)
+      .eq("period", "live")
+      .maybeSingle(),
   ]);
+
   // Sample personas use a pre-baked narrative — recompute would burn a
   // Claude call to produce the same canned output. Detect and short-circuit.
   const samplePersonaId = detectSamplePersona(accountsQ.data ?? []);
+
+  // Throttle real-data recomputes — the narrative shape doesn't change
+  // minute-to-minute, and without a limit a user could spam this action
+  // and burn through Anthropic credits. Sample mode is exempt since it
+  // doesn't call Claude. 60s is enough to deter scripted abuse without
+  // feeling restrictive to a human who genuinely wants a fresh read.
+  if (!samplePersonaId && snapshotQ.data?.generated_at) {
+    const ageSec =
+      (Date.now() - new Date(snapshotQ.data.generated_at).getTime()) / 1000;
+    if (ageSec < 60) {
+      redirect("/dashboard?info=recompute_throttled");
+    }
+  }
+
   await getOrGenerateNarrative(supabase, user.id, intel, {
     force: true,
     currency,

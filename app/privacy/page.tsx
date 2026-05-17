@@ -85,10 +85,12 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong>Anthropic (Claude)</strong> — generates the
-                plain-English narrative on your dashboard. Receives only the
-                aggregated metrics, pattern summaries, and your top recurring
-                charges — never individual transactions, descriptions, or
-                merchant names.
+                plain-English narrative on your dashboard. Receives only
+                aggregated metrics, pattern summaries, and the merchant
+                labels of your top recurring charges (e.g.{" "}
+                <code>NETFLIX.COM</code>) so the narrative can reference
+                them by name. Individual one-off transactions and
+                non-recurring descriptions are never sent.
               </li>
               <li>
                 <strong>Vercel</strong> — hosts the application code that

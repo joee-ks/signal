@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const next = sanitizeNext(searchParams.get("next"));
+  const next = sanitizeNext(searchParams.get("next"), origin);
 
   if (tokenHash && type) {
     const supabase = await createClient();
@@ -48,8 +48,21 @@ export async function GET(request: NextRequest) {
   return NextResponse.redirect(`${origin}/login?error=link_invalid`);
 }
 
-/** Only allow same-site relative redirects. */
-function sanitizeNext(value: string | null): string {
-  if (value && value.startsWith("/") && !value.startsWith("//")) return value;
-  return "/dashboard";
+/**
+ * Only allow same-site redirects. The previous startsWith("/") check was
+ * bypassable via backslashes and control characters — some browsers
+ * normalize Location: /\evil.com to //evil.com (an open redirect). Two
+ * defenses: reject the offending characters outright, then resolve via
+ * the URL parser and require the resulting origin to match ours.
+ */
+function sanitizeNext(value: string | null, origin: string): string {
+  if (!value) return "/dashboard";
+  if (/[\\\x00-\x1f]/.test(value)) return "/dashboard";
+  try {
+    const url = new URL(value, origin);
+    if (url.origin !== origin) return "/dashboard";
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return "/dashboard";
+  }
 }

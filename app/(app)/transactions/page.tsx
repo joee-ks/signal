@@ -27,12 +27,12 @@ export const metadata = { title: "Transactions" };
 const RESULT_LIMIT = 200;
 
 /**
- * Escape characters that have special meaning inside a Supabase `or(...)`
- * comma-separated filter expression. Without this, a comma in the user's
- * search input would split the expression into multiple filters.
+ * Escape ILIKE wildcards (`%`, `_`, `\`) so user input is treated as a
+ * literal substring rather than a pattern. Without this, a search for "50%"
+ * matches everything; a search for "_" matches single-character strings.
  */
-function escapeForOr(value: string): string {
-  return value.replace(/[,()]/g, " ");
+function escapeIlike(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
 }
 
 export default async function TransactionsPage(props: {
@@ -51,7 +51,12 @@ export default async function TransactionsPage(props: {
 
   // Build the transactions query with filters applied at the DB level so
   // we don't pull 200 rows just to throw most away client-side. Search
-  // hits both description and merchant via Postgres ILIKE.
+  // uses the parameterized .ilike() helper (which safely escapes the
+  // column and value at the PostgREST layer) on `description` only. The
+  // `merchant` column is just `description.trim()` for form-created rows
+  // and a cleaned variant for sample data — both contain the same words,
+  // so dropping merchant from search loses essentially no functionality
+  // while avoiding string-interpolation into a PostgREST .or() expression.
   let txnsQuery = supabase
     .from("transactions")
     .select(
@@ -62,10 +67,7 @@ export default async function TransactionsPage(props: {
     .order("created_at", { ascending: false })
     .limit(RESULT_LIMIT);
   if (q) {
-    const safe = escapeForOr(q);
-    txnsQuery = txnsQuery.or(
-      `description.ilike.%${safe}%,merchant.ilike.%${safe}%`,
-    );
+    txnsQuery = txnsQuery.ilike("description", `%${escapeIlike(q)}%`);
   }
   if (category) {
     txnsQuery = txnsQuery.eq("category", category);

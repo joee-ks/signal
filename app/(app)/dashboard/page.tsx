@@ -142,6 +142,12 @@ export default async function DashboardPage(props: {
           Signals recomputed.
         </div>
       )}
+      {info === "recompute_throttled" && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+          Just regenerated — try again in a minute. The narrative updates
+          automatically as your data changes.
+        </div>
+      )}
 
       {!hasTransactions ? (
         hasOwnAccount ? (
