@@ -49,6 +49,31 @@ async function requireUser() {
   return { supabase, user };
 }
 
+/**
+ * Defense in depth: verify the user owns the target account before inserting
+ * or updating a transaction against it. The form is always populated from the
+ * user's own accounts, but a crafted POST could submit any UUID. The
+ * transactions.user_id check passes (we set it from the session), but the FK
+ * to accounts(id) has no ownership constraint — without this check, a
+ * transaction could be created pointing at a stranger's account row. The
+ * stranger sees nothing (their queries scope to their own user_id) and the
+ * RPC-based adjustBalance silently no-ops via RLS, but the inconsistency
+ * pollutes the user's own DB. Cheap to check; cheaper than diagnosing later.
+ */
+async function assertOwnsAccount(
+  supabase: SupaClient,
+  userId: string,
+  accountId: string,
+) {
+  const { data } = await supabase
+    .from("accounts")
+    .select("id")
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!data) throw new Error("Account not found.");
+}
+
 function buildTxnRow(parsed: z.infer<typeof baseSchema>) {
   const dollars = centsFromDollarString(parsed.amount);
   if (dollars == null) throw new Error("Amount must be a number.");
@@ -91,6 +116,7 @@ export async function createTransaction(formData: FormData) {
   const parsed = createSchema.parse(Object.fromEntries(formData));
   const { supabase, user } = await requireUser();
   const row = buildTxnRow(parsed);
+  await assertOwnsAccount(supabase, user.id, row.account_id);
 
   const { error } = await supabase.from("transactions").insert({
     user_id: user.id,
@@ -125,7 +151,10 @@ export async function updateTransaction(formData: FormData) {
   if (error) throw error;
 
   if (old.account_id !== newRow.account_id) {
-    // Moved between accounts: revert on the old, apply on the new.
+    // Moved between accounts: revert on the old, apply on the new. Verify
+    // the user owns the destination first — the old.account_id was already
+    // checked via the user_id-scoped fetch above.
+    await assertOwnsAccount(supabase, user.id, newRow.account_id);
     await adjustBalance(supabase, user.id, old.account_id, -old.amount_cents);
     await adjustBalance(supabase, user.id, newRow.account_id, newRow.amount_cents);
   } else {

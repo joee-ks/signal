@@ -16,34 +16,46 @@ export async function recomputeNarrative() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [intel, currency, accountsQ, snapshotQ] = await Promise.all([
+  const [intel, currency, accountsQ] = await Promise.all([
     fetchAndComputeIntelligence(supabase, user.id),
     getUserCurrency(supabase, user.id),
     supabase
       .from("accounts")
       .select("name, is_archived")
       .eq("user_id", user.id),
-    supabase
-      .from("signals_snapshots")
-      .select("generated_at")
-      .eq("user_id", user.id)
-      .eq("period", "live")
-      .maybeSingle(),
   ]);
 
   // Sample personas use a pre-baked narrative — recompute would burn a
   // Claude call to produce the same canned output. Detect and short-circuit.
   const samplePersonaId = detectSamplePersona(accountsQ.data ?? []);
 
-  // Throttle real-data recomputes — the narrative shape doesn't change
-  // minute-to-minute, and without a limit a user could spam this action
-  // and burn through Anthropic credits. Sample mode is exempt since it
-  // doesn't call Claude. 60s is enough to deter scripted abuse without
-  // feeling restrictive to a human who genuinely wants a fresh read.
-  if (!samplePersonaId && snapshotQ.data?.generated_at) {
-    const ageSec =
-      (Date.now() - new Date(snapshotQ.data.generated_at).getTime()) / 1000;
-    if (ageSec < 60) {
+  // Throttle real-data recomputes atomically. The previous read-then-check
+  // pattern raced: two parallel requests could both observe the snapshot as
+  // old enough and both call Claude. New pattern: an upsert ensures a row
+  // exists (with an epoch timestamp on first compute) so the conditional
+  // UPDATE below has something to claim; then a single UPDATE bumps
+  // generated_at iff the existing value is older than the throttle window.
+  // Parallel requests race on the UPDATE — exactly one wins (1 row
+  // returned), the others see 0 rows and get throttled. Sample mode is
+  // exempt since it doesn't call Claude.
+  if (!samplePersonaId) {
+    await supabase.from("signals_snapshots").upsert(
+      {
+        user_id: user.id,
+        period: "live",
+        generated_at: new Date(0).toISOString(),
+      },
+      { onConflict: "user_id,period", ignoreDuplicates: true },
+    );
+    const sixtyAgo = new Date(Date.now() - 60_000).toISOString();
+    const { data: claimed } = await supabase
+      .from("signals_snapshots")
+      .update({ generated_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+      .eq("period", "live")
+      .lt("generated_at", sixtyAgo)
+      .select("user_id");
+    if (!claimed?.length) {
       redirect("/dashboard?info=recompute_throttled");
     }
   }

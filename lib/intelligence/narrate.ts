@@ -200,6 +200,25 @@ export async function generateNarrative(
   throw new Error("Claude did not return a tool_use response");
 }
 
+/**
+ * Sanitize a user-controlled string before interpolating it into the prompt.
+ * Collapses newlines + tabs (so a crafted description can't insert fake prompt
+ * sections), strips non-printable and non-ASCII chars (no zero-width tricks),
+ * and caps length so a 200-char description can't dominate the input.
+ *
+ * Used on every value that originates in user data — transaction descriptions
+ * landing in recurring-charge labels, pattern titles and details that may
+ * embed merchant names, etc. Cheap and lossless for legitimate merchant
+ * strings like "NETFLIX.COM" or "WHOLE FOODS MARKET".
+ */
+function sanitizeForPrompt(s: string): string {
+  return s
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/[^\x20-\x7E]/g, "")
+    .trim()
+    .slice(0, 80);
+}
+
 /** Compact, redacted text representation of the intelligence result. */
 function buildNarrativeInput(
   intel: IntelligenceResult,
@@ -272,8 +291,8 @@ function buildNarrativeInput(
     lines.push("  (none)");
   } else {
     for (const p of patterns) {
-      lines.push(`  - [${p.severity}] ${p.title}`);
-      lines.push(`    ${p.detail}`);
+      lines.push(`  - [${p.severity}] ${sanitizeForPrompt(p.title)}`);
+      lines.push(`    ${sanitizeForPrompt(p.detail)}`);
     }
   }
   lines.push("");
@@ -285,7 +304,7 @@ function buildNarrativeInput(
     lines.push("Top recurring outflows (monthly equivalent):");
     for (const r of topRecurring) {
       lines.push(
-        `  - ${r.sample_description}: ${D(r.monthly_equivalent_cents)}/mo (${r.cadence}, category=${r.category})`,
+        `  - ${sanitizeForPrompt(r.sample_description)}: ${D(r.monthly_equivalent_cents)}/mo (${r.cadence}, category=${r.category})`,
       );
     }
     lines.push("");

@@ -71,6 +71,8 @@ Supabase SQL Editor (Dashboard → SQL Editor → New query → paste → Run):
 - `0006_security_warnings.sql` — pins `search_path` on `set_updated_at` and
   revokes `EXECUTE` on `handle_new_user` from anon/authenticated/public.
   Closes three Supabase security-advisor warnings without functional change.
+- `0007_balance_bigint.sql` — widens `adjust_account_balance(p_delta)` from
+  `int` to `bigint` to match `amount_cents` everywhere else in the schema.
 
 **Auth URL configuration.** Dashboard → Authentication → URL Configuration:
 - Site URL: your production URL (e.g. `https://signal-steel.vercel.app`)
