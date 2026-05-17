@@ -19,11 +19,24 @@ import {
 type Mode = "signin" | "signup";
 
 /**
- * Copy is mode-specific (sign-in vs sign-up) but the auth call is identical
- * in both modes — we always pass shouldCreateUser: true and always show
- * "check your inbox" regardless of whether the email is already registered.
- * This means the page leaks no information about whether a given email is in
- * the system; mode is purely a routing/copy convenience.
+ * Auth strategy after dropping email_has_account (migration 0003):
+ *
+ *   - Sign-in mode calls signInWithOtp with shouldCreateUser: false. If the
+ *     email isn't registered, Supabase returns a "Signups not allowed"
+ *     error which we catch and surface as a friendly "no account found"
+ *     banner. Enumeration via this path is bounded by Supabase's built-in
+ *     auth rate limits (~30/hr per email, ~10/min per IP), and every
+ *     successful guess sends a real OTP to the victim — so mass scraping
+ *     is spam-flavored and costly. Acceptable trade-off vs the easy
+ *     enumeration the dropped RPC enabled.
+ *
+ *   - Sign-up mode calls signInWithOtp with shouldCreateUser: true and
+ *     gets no signal back about whether the email was already registered.
+ *     If it was, Supabase silently sends a sign-in link instead of a
+ *     sign-up confirmation; the user clicks it and lands in their
+ *     existing account. No explicit "already registered" warning is
+ *     possible without re-introducing an enumeration vector. Acceptable
+ *     because the experience still works — just without a callout.
  */
 const COPY: Record<
   Mode,
@@ -48,9 +61,8 @@ const COPY: Record<
     sentTitle: "Check your email",
     sentDescription: (email) => (
       <>
-        We sent a link to <strong>{email}</strong>. Open it on this device to
-        sign in. If you don&apos;t have a Signal account yet, one will be
-        created for you when you click the link.
+        We sent a sign-in link to <strong>{email}</strong>. Open it on this
+        device to continue.
       </>
     ),
     switchPrompt: "New to Signal?",
@@ -67,7 +79,7 @@ const COPY: Record<
     sentDescription: (email) => (
       <>
         We sent a link to <strong>{email}</strong>. Open it on this device to
-        finish setting up your account. If you already have one, the same link
+        finish creating your account. If you already have one, the same link
         will sign you in.
       </>
     ),
@@ -93,9 +105,14 @@ function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  // Only used in sign-in mode — set when the entered email isn't registered.
+  const [noAccount, setNoAccount] = useState(false);
 
   // Reset transient state when the user switches between sign-in and sign-up.
+  // The component instance is preserved across the URL change, so without this
+  // a stale flag from the previous mode would leak through.
   useEffect(() => {
+    setNoAccount(false);
     setSent(false);
     setLoading(false);
   }, [mode]);
@@ -105,23 +122,37 @@ function LoginPageContent() {
     const trimmed = email.trim();
     if (!trimmed) return;
 
+    setNoAccount(false);
     setLoading(true);
     const supabase = createClient();
 
-    // Uniform flow: always allow account creation. The response is the same
-    // ("check your inbox") whether the account existed or was just created,
-    // so the form leaks no information about which emails are registered.
-    // If a user typed the wrong email in sign-in mode, clicking the link
-    // creates a fresh account they can delete from settings.
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
       options: {
-        shouldCreateUser: true,
+        // Sign-up creates the user if needed; sign-in requires the user to
+        // already exist (lets us detect "no account" without an RPC).
+        shouldCreateUser: mode === "signup",
         emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
     });
     setLoading(false);
+
     if (error) {
+      // In sign-in mode, shouldCreateUser:false yields a specific error when
+      // the email isn't in auth.users. The exact string varies across SDK
+      // versions, so match loosely on the keywords we know appear in it.
+      if (mode === "signin") {
+        const msg = error.message?.toLowerCase() ?? "";
+        if (
+          msg.includes("signup") ||
+          msg.includes("not allowed") ||
+          msg.includes("not found") ||
+          msg.includes("does not exist")
+        ) {
+          setNoAccount(true);
+          return;
+        }
+      }
       toast.error(error.message);
       return;
     }
@@ -153,7 +184,10 @@ function LoginPageContent() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => setSent(false)}
+                  onClick={() => {
+                    setSent(false);
+                    setNoAccount(false);
+                  }}
                 >
                   Use a different email
                 </Button>
@@ -175,11 +209,25 @@ function LoginPageContent() {
                       autoComplete="email"
                       placeholder="you@example.com"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (noAccount) setNoAccount(false);
+                      }}
                       required
                       disabled={loading}
                     />
                   </div>
+                  {noAccount && (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                      No Signal account is registered to that email.{" "}
+                      <Link
+                        href="/login?mode=signup"
+                        className="font-medium underline underline-offset-4 hover:text-foreground"
+                      >
+                        Create an account →
+                      </Link>
+                    </div>
+                  )}
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? copy.submitting : copy.submit}
                   </Button>
