@@ -135,10 +135,7 @@ export default async function SignalsPage() {
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold tabular-nums">
-                      {formatCents(-r.typical_amount_cents, { currency })}
-                    </p>
-                    <p className="text-xs text-muted-foreground tabular-nums">
-                      ~{formatCents(-r.monthly_equivalent_cents, { currency })}/mo
+                      {formatCents(-r.monthly_equivalent_cents, { currency })}/mo
                     </p>
                   </div>
                 </li>
@@ -176,10 +173,7 @@ export default async function SignalsPage() {
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                      +{formatCents(r.typical_amount_cents, { currency })}
-                    </p>
-                    <p className="text-xs text-muted-foreground tabular-nums">
-                      ~{formatCents(r.monthly_equivalent_cents, { currency })}/mo
+                      +{formatCents(r.monthly_equivalent_cents, { currency })}/mo
                     </p>
                   </div>
                 </li>
