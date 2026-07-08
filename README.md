@@ -1,7 +1,5 @@
 # Signal
 
-**Find the signal in your spending.**
-
 Signal is a financial health & intelligence app for young adults navigating
 financial uncertainty. It filters financial noise into meaningful signals that
 guide better decisions — not a budgeter, not a tracker, not an advisor.
